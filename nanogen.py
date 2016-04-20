@@ -1,4 +1,9 @@
 ### Written by Matthew Kwiecien Jul, 2015
+### Modified by CGG, spring 2016
+
+from __future__ import print_function
+from __future__ import division
+
 import numpy as np
 from scipy import *
 import subprocess
@@ -6,10 +11,10 @@ import time
 import os
 import re
 from itertools import chain
-
+import shutil
 
 global basePath
-basePath = "/Users/goedde/Desktop/MD/"
+basePath = os.path.abspath('..') + "/Results/"
 
 # Maybe adding later... need to think more about the implementation
 # class Nanotube:
@@ -17,7 +22,12 @@ basePath = "/Users/goedde/Desktop/MD/"
 # 	def __init__(self, rings, n, m):
 # 		self.rings = rings
 # 		self.n = n
-# 		self.m = m 
+# 		self.m = m
+
+# Simple function to create a quoted string to protect file/path names with spaces
+def quoted(theString):
+
+	return '"' + theString + '"'
 
 # VMD generation of nanotube and periodic boundary conditions
 def tubeGen(inFile, pbcFile, N_0, n, m):
@@ -26,14 +36,14 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
 	the name of the same nanotube but now with periodic boundary conditions applied to it. """
 
 	#Bonds lengths of different armchair nanotubes in nanometers
-	s0 = .1418
+	s0 = 0.1418
 	#calculates the length of the nanotube based on bond lengths
 	l = float((N_0-0.75))*s0*np.sqrt(3)
 
-	tubePath = basePath+"cnt"+str(N_0)+"_"+str(n)+"x"+str(m)+"/"
-	pbcPath = tubePath+"PBC/"+inFile+"_run/"
-	if ~os.path.exists(pbcPath):
-		os.system("mkdir -p "+pbcPath)
+	tubePath = basePath + "cnt" + str(N_0) + "_" + str(n) + "x" + str(m) + "/"
+	pbcPath = tubePath + "PBC/" + inFile + "_run/"
+	if not os.path.exists(pbcPath):
+		os.makedirs(pbcPath)
 
 	# Opening a pipe to VMD in the shell
 	VMDin=subprocess.Popen(["vmd","-dispdev", "none"], stdin=subprocess.PIPE)
@@ -42,10 +52,10 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
 	sourceCNT = "source CNTtools.tcl\n"
 	CNTtools = "package require CNTtools 1.0\n"
 
-	genNT = "genNT "+inFile+" "+tubePath+" "+str(l)+" "+str(n)+" "+str(m)+"\n"
-	pbcNT = "pbcNT "+tubePath+inFile+" "+pbcPath+pbcFile+" default\n"
-	fixNT = "fixNT "+pbcPath+pbcFile+"\n"
-	removeLangevinWater = "removeLangevinWater "+pbcPath+pbcFile+"\n"
+	genNT = "genNT " + quoted(inFile) + " " + quoted(tubePath) + " " + str(l) + " " + str(n) + " " + str(m) + "\n"
+	pbcNT = "pbcNT " + quoted(tubePath + inFile) + " " + quoted(pbcPath + pbcFile) + " default\n"
+	fixNT = "fixNT " + quoted(pbcPath + pbcFile) + "\n"
+	removeLangevinWater = "removeLangevinWater " + quoted(pbcPath + pbcFile) + "\n"
 
 	# run commands through pipe and saves to file
 	VMDin.stdin.write(sourceCNT)
@@ -59,7 +69,7 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
 	VMDin.stdin.flush()
 	VMDin.stdin.close
 	VMDin.communicate()
-	if VMDin.returncode==0:
+	if VMDin.returncode == 0:
 		return tubePath, pbcPath
 
 
@@ -68,12 +78,12 @@ def solvate(inFile, N_0, S, n, m, force):
 	the nanotube, then write out new psf and pdb files for the nanotube. """
 	tPath, pPath = tubeGen(inFile,inFile,N_0,n,m)
 
-	os.system("rm "+tPath+inFile+".pdb")
-	os.system("rm "+tPath+inFile+".psf")
+	os.remove(tPath + inFile + ".pdb")
+	os.remove(tPath + inFile + ".psf")
 	# Opens input nanotube psf and pdb files, and reads all the lines of each file into lists
-	with open(pPath+inFile+".psf") as psfFile:
+	with open(pPath + inFile + ".psf") as psfFile:
 		psfLines = psfFile.readlines()
-	with open(pPath+inFile+".pdb") as pdbFile:
+	with open(pPath + inFile + ".pdb") as pdbFile:
 		pdbLines = pdbFile.readlines()
 
 	# Grabs the lengths of each of the lists
@@ -97,7 +107,7 @@ def solvate(inFile, N_0, S, n, m, force):
 	sAngleFormat = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}{8: >8}\n"
 
 
-	# Bonds lengths for different armchair nanotubes
+	# Bonds lengths for different armchair nanotubes, now in Angstroms
 	s0 = 1.418
 	# Calculates the apothem of each regular hexagon in the nanotube and then calculates the distance
 	## between the center of each ring in the tube
@@ -120,7 +130,7 @@ def solvate(inFile, N_0, S, n, m, force):
 	# Finds the original number of atoms in the Pdb file
 	nAtoms = lenPdb-2
 	# Calculates the new number of atoms after solvating
-	newAtoms = nAtoms+(3*(N_0+S)) 
+	newAtoms = nAtoms + (3*(N_0+S)) 
 	# Calculates the new number of bonds and angles after solvating
 	newBonds = int(nAtoms*(3./2)) + 2*(N_0+S)
 	newAngles = nAtoms*3 + (N_0+S)
@@ -198,7 +208,7 @@ def solvate(inFile, N_0, S, n, m, force):
 			for j in range(i,i+diff):
 				tempStr = tempStr + "{:>8}".format(intBonds[j])
 
-			bondsFinal.append( " "+tempStr+"\n" )
+			bondsFinal.append( " " + tempStr + "\n" )
 
 	# Formates the list of angles into the psf format with 9 columns
 	for i in range(0,len(intAngles),9):
@@ -212,7 +222,7 @@ def solvate(inFile, N_0, S, n, m, force):
 			for j in range(i,i+diff):
 				tempStr = tempStr + "{:>8}".format(intAngles[j])
 
-			anglesFinal.append( " "+tempStr+"\n" )
+			anglesFinal.append( " " + tempStr + "\n" )
 
 	sFactorAdjust = float(N_0) / (N_0 + S)
 
@@ -229,18 +239,18 @@ def solvate(inFile, N_0, S, n, m, force):
 
 	# Writes the new pdb lines to a new pdb file
 	pdbLines.append("END\n")
-	pdbOut = open(pPath+inFile+"-solv.pdb",'w')
+	pdbOut = open(pPath + inFile + "-solv.pdb",'w')
 	pdbOut.writelines(pdbLines)
 	pdbOut.close()
 
 	# Writes the new psf lines to a new psf file
-	psfOut = open(pPath+inFile+"-solv.psf",'w')
+	psfOut = open(pPath + inFile + "-solv.psf",'w')
 	psfOut.writelines(preAtoms)
 	psfOut.writelines(psfLines[atomIndex])
 	psfOut.writelines(atoms)
-	psfOut.writelines("\n"+psfLines[bondIndex])
+	psfOut.writelines("\n" + psfLines[bondIndex])
 	psfOut.writelines(bondsFinal)
-	psfOut.writelines("\n"+psfLines[angleIndex])
+	psfOut.writelines("\n" + psfLines[angleIndex])
 	psfOut.writelines(anglesFinal)
 	psfOut.writelines(postAngles)
 	psfOut.close()
@@ -250,36 +260,36 @@ def solvate(inFile, N_0, S, n, m, force):
 	forceVal = "{0:.2f}".format(force)
 	forceVal = forceVal[0:4]
 
-	with open (pPath+inFile+"-solv.pdb") as f:
+	with open (pPath + inFile + "-solv.pdb") as f:
 		flines = f.readlines()
 
 	for i in range(1,len(flines)-1):
 		if i < lenPdb-1:
-			flines[i] = flines[i][0:56]+"0.00"+flines[i][60::]
+			flines[i] = flines[i][0:56] + "0.00" + flines[i][60::]
 		else:
 			if "OH2" in flines[i]:
-				flines[i] = flines[i][0:33]+"0.000   0.000   1.000  "+forceVal+flines[i][60::]
+				flines[i] = flines[i][0:33] + "0.000   0.000   1.000  " + forceVal + flines[i][60::]
 			else:
-				flines[i] = flines[i][0:56]+"0.00"+flines[i][60::]
+				flines[i] = flines[i][0:56] + "0.00" + flines[i][60::]
 
 
-	outFile = open(pPath+inFile+"-force.pdb",'w')
+	outFile = open(pPath + inFile + "-force.pdb",'w')
 	outFile.writelines(flines)
 	outFile.close()
 
 	# Generate a file that restrains each carbon atom to it's initial position with force constant k
 
 	kVal = 3.0
-	with open (pPath+inFile+"-solv.pdb") as kFile:
+	with open (pPath + inFile + "-solv.pdb") as kFile:
 		kfLines = kFile.readlines()
 
 	for i in range(1,len(kfLines)-1):
 		if i < lenPdb-1:
-			kfLines[i] = kfLines[i][0:56]+"{:.2f}".format(kVal)+kfLines[i][60::]
+			kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(kVal) + kfLines[i][60::]
 		else:
-			kfLines[i] = kfLines[i][0:56]+"{:.2f}".format(0.00)+kfLines[i][60::]
+			kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(0.00) + kfLines[i][60::]
 
-	outkFile = open(pPath+inFile+"-restraint.pdb",'w')
+	outkFile = open(pPath + inFile + "-restraint.pdb",'w')
 	outkFile.writelines(kfLines)
 	outkFile.close()
 
@@ -291,19 +301,19 @@ def simWrite(pbcFile, CNTpath, minimize, temp = 300, length = 20000, output = "w
 	with different parameters, simWrite will create a directory for the simulation using 
 	the following template: ~/Simulations/cntl_nxm/temp/length/sim.dcd, sim.conf.  """
 
-	simPath = CNTpath+str(temp)+"/"+str(length)+"/"
-	if ~os.path.exists(simPath):
-		os.system("mkdir -p "+simPath)
+	simPath = CNTpath + str(temp) + "/" + str(length) + "/"
+	if not os.path.exists(simPath):
+		os.makedirs(simPath)
 
 	# Grabs the CNT basis vectors
-	x,y,z = getCNTBasis(CNTpath+pbcFile)
+	x,y,z = getCNTBasis(CNTpath + pbcFile)
 
 	# Read in lines of simulation file
-	with open(basePath+"templates/sim_template.conf") as inFile:
+	with open(basePath + "templates/sim_template.conf") as inFile:
 		simLines = inFile.readlines()
 
-	simLines[12] = "structure          "+CNTpath+pbcFile+"-solv.psf\n"
-	simLines[13] = "coordinates        "+CNTpath+pbcFile+"-solv.pdb\n"
+	simLines[12] = "structure          " + quoted(CNTpath + pbcFile + "-solv.psf") + "\n"
+	simLines[13] = "coordinates        " + quoted(CNTpath + pbcFile + "-solv.pdb") + "\n"
 
 	simLines[15] = "set temperature    {:3d}\n".format(temp)
 	simLines[30] = "cellBasisVector1    {0:<10.3f}{1:<10}{2:}\n".format(x,0.,0.)
@@ -311,24 +321,24 @@ def simWrite(pbcFile, CNTpath, minimize, temp = 300, length = 20000, output = "w
 	simLines[32] = "cellBasisVector3    {0:<10}{1:<10}{2:.3f}\n".format(0.,0.,z)
 	simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format( 0,0, float(z)/2 )
 
-	simLines[16] = "set outputname     "+simPath+output+"\n"
-	simLines[71] = "fixedAtomsFile      "+CNTpath+pbcFile+"-solv.pdb\n"
-	simLines[75] = "consref 			"+CNTpath+pbcFile+"-restraint.pdb\n"
-	simLines[76] = "conskfile			"+CNTpath+pbcFile+"-restraint.pdb\n"
-	simLines[78] = "constraintScaling 	"+"{:.2f}".format(1.00)
+	simLines[16] = "set outputname     " + quoted(simPath + output) + "\n"
+	simLines[71] = "fixedAtomsFile      " + CNTpath + pbcFile + "-solv.pdb\n"
+	simLines[75] = "consref 			" + CNTpath + pbcFile + "-restraint.pdb\n"
+	simLines[76] = "conskfile			" + CNTpath + pbcFile + "-restraint.pdb\n"
+	simLines[78] = "constraintScaling 	" + "{:.2f}".format(1.00)
 
-	simLines[94] = "consforcefile 	    "+CNTpath+pbcFile+"-force.pdb\n"
-	simLines[100] = "minimize "+str(minimize)+"\n"
+	simLines[94] = "consforcefile 	    " + CNTpath + pbcFile + "-force.pdb\n"
+	simLines[100] = "minimize " + str(minimize) + "\n"
 	simLines[102] = "run {:5d} \n".format(length)
 
 	# Write contents out to original file
 	if os.path.exists(simPath):
-		outFile = open(simPath+output+".conf", "w")
+		outFile = open(simPath + output + ".conf", "w")
 		outFile.writelines(simLines)
 		outFile.close()
-		paramFile = basePath+"templates/par_all27_prot_lipid.prm"
-		os.system("cp "+paramFile+" "+simPath)
-		return simPath+output+".conf"
+		paramFile = basePath + "templates/par_all27_prot_lipid.prm"
+		shutil.copy(paramFile, simPath)
+		return simPath + output + ".conf"
 
 
 def runSim(simPath):
@@ -338,14 +348,14 @@ def runSim(simPath):
 	Namd2in.stdin.close
 	Namd2in.communicate()
 	if Namd2in.returncode==0:
-		print "################################################################\nSimulation finished\nSimulation file saved into "+simPath.replace(".conf",".dcd")+".\n################################################################\n"
+		print("################################################################\nSimulation finished\nSimulation file saved into " + simPath.replace(".conf",".dcd") + ".\n################################################################\n")
 
 
 # find cell basis
 def getCNTBasis(CNT):
 	""" getCNTBasis finds the basis of a nanotube with filename outFile. """
 	# Opens the CNT prebond file and reads the header of the file
-	with open(CNT+"-prebond.pdb") as basisFile:
+	with open(CNT + "-prebond.pdb") as basisFile:
 		header = basisFile.next()
 
 	# Splits the first line of the CNT-prebond file, and finds the x,y,z basis vectors of the CNT 
@@ -357,8 +367,8 @@ def getCNTBasis(CNT):
 	return xVec, yVec, zVec
 
 
-def main(FNAME,N_0,S,n,m,TEMP,LENGTH,FORCESTRENGTH,minimize):
-	pbcPath = solvate(FNAME,N_0,S,n,m,FORCESTRENGTH)
-	simPath = simWrite(FNAME,pbcPath,minimize,TEMP,LENGTH,FNAME)
+def main(FNAME, N_0, S, n, m, TEMP, LENGTH, FORCESTRENGTH, minimize):
+	pbcPath = solvate(FNAME, N_0, S, n, m, FORCESTRENGTH)
+	simPath = simWrite(FNAME, pbcPath, minimize, TEMP, LENGTH, FNAME)
 	runSim(simPath)
 
