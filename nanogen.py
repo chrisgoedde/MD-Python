@@ -43,45 +43,65 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
         + str(m) + "/N0 = " + str(N_0) + "/"
     pbcPath = tubePath + "PBC/"
     pbcConfigPath = pbcPath + "Config Files/"
-    tubePath = tubePath + "Config Files/"
-    
-    if not os.path.exists(pbcConfigPath):
-        os.makedirs(pbcConfigPath)
+    tubeConfigPath = tubePath + "Config Files/"
 
-    if not os.path.exists(tubePath):
-        os.makedirs(tubePath)
+    if os.path.isfile(pbcConfigPath + inFile + ".pdb") \
+        and os.path.isfile(pbcConfigPath + inFile + ".psf") \
+        and os.path.isfile(pbcConfigPath + inFile + "-prebond.pdb") \
+        and os.path.isfile(pbcConfigPath + inFile + "-prebond.psf"):
+        
+        print("################################################################\n" \
+              + "Configuration files already exist in:\n" + pbcConfigPath + ".\n" \
+              + "################################################################\n")
 
-    # Opening a pipe to VMD in the shell
-    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE)
-
-    # runs CNTtools.tcl script to generate nanotube and generate PBCs
-    sourceCNT = "source CNTtools.tcl\n"
-    CNTtools = "package require CNTtools 1.0\n"
-
-    genNT = "genNT " + quoted(inFile) + " " + quoted(tubePath) + " " \
-        + str(l) + " " + str(n) + " " + str(m) + "\n"
-
-    pbcNT = "pbcNT " + quoted(tubePath + inFile) + " " \
-        + quoted(pbcConfigPath + pbcFile) + " default\n"
-
-    fixNT = "fixNT " + quoted(pbcConfigPath + pbcFile) + "\n"
-
-    removeLangevinWater = "removeLangevinWater " + quoted(pbcConfigPath + pbcFile) + "\n"
-
-    # run commands through pipe and saves to file
-    VMDin.stdin.write(sourceCNT)
-    VMDin.stdin.write(CNTtools)
-    VMDin.stdin.write(genNT)
-    VMDin.stdin.write(pbcNT)
-    VMDin.stdin.write(fixNT)
-    VMDin.stdin.write(removeLangevinWater)
-
-    # finished creating periodic nanotubes in VMD
-    VMDin.stdin.flush()
-    VMDin.stdin.close
-    VMDin.communicate()
-    if VMDin.returncode == 0:
         return pbcPath, pbcConfigPath
+
+    else:
+    
+        print("################################################################\n" \
+              + "Running VMD to generate nanotube configuration files.\n" \
+              + "################################################################\n")
+
+        if not os.path.exists(pbcConfigPath):
+            os.makedirs(pbcConfigPath)
+
+        if not os.path.exists(tubeConfigPath):
+            os.makedirs(tubeConfigPath)
+
+        logFile = open(tubeConfigPath + inFile + ".log", "w")
+
+        # Opening a pipe to VMD in the shell
+        VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                           stdout=logFile)
+
+        # runs CNTtools.tcl script to generate nanotube and generate PBCs
+        sourceCNT = "source CNTtools.tcl\n"
+        CNTtools = "package require CNTtools 1.0\n"
+
+        genNT = "genNT " + quoted(inFile) + " " + quoted(tubeConfigPath) + " " \
+            + str(l) + " " + str(n) + " " + str(m) + "\n"
+
+        pbcNT = "pbcNT " + quoted(tubeConfigPath + inFile) + " " \
+            + quoted(pbcConfigPath + pbcFile) + " default\n"
+
+        fixNT = "fixNT " + quoted(pbcConfigPath + pbcFile) + "\n"
+
+        removeLangevinWater = "removeLangevinWater " + quoted(pbcConfigPath + pbcFile) + "\n"
+
+        # run commands through pipe and saves to file
+        VMDin.stdin.write(sourceCNT)
+        VMDin.stdin.write(CNTtools)
+        VMDin.stdin.write(genNT)
+        VMDin.stdin.write(pbcNT)
+        VMDin.stdin.write(fixNT)
+        VMDin.stdin.write(removeLangevinWater)
+
+        # finished creating periodic nanotubes in VMD
+        VMDin.stdin.flush()
+        VMDin.stdin.close
+        VMDin.communicate()
+        if VMDin.returncode == 0:
+            return pbcPath, pbcConfigPath
 
 
 def solvate(inFile, N_0, S, n, m, force):
@@ -108,9 +128,9 @@ def solvate(inFile, N_0, S, n, m, force):
     hydro2 = "ATOM{0:>7}  H2  TIP3            0.000  -0.766{1:>8.3f}  0.00  0.00      TUB  H\n"
 
     # Psf 
-    opsf  = "    {0:>5} TUB  {1:>5}  TIP3 OH2  OT    -0.834000       15.9994           0\n"
-    h1psf = "    {0:>5} TUB  {1:>5}  TIP3 H1   HT     0.417000        1.0080           0\n"
-    h2psf = "    {0:>5} TUB  {1:>5}  TIP3 H2   HT     0.417000        1.0080           0\n"
+    opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
+    h1psf = "   {0:>5} TUB {1:>5} TIP3 H1   HT     0.417000        1.0080           0\n"
+    h2psf = "   {0:>5} TUB {1:>5} TIP3 H2   HT     0.417000        1.0080           0\n"
 
     # String format for the bonds and angles in the psf file
     sBondFormat  = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}\n"
@@ -363,7 +383,10 @@ def runSim(simPath, simFile, output = "waterSim"):
     Namd2in.stdin.close
     Namd2in.communicate()
     if Namd2in.returncode==0:
-        print("################################################################\nSimulation finished\nSimulation file saved into " + simPath.replace(".conf", ".dcd") + ".\n################################################################\n")
+        print("################################################################\n" \
+              + "Simulation finished\nSimulation file saved into " \
+              + simPath.replace(".conf", ".dcd") + ".\n" \
+              + "################################################################\n")
 
 
 # find cell basis
