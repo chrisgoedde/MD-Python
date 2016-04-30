@@ -48,6 +48,7 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
     paths = {}
     paths['base'] = os.path.abspath('..') + '/' + inFile + '/Data/'
     paths['type'] = paths['base'] + '(' + str(n) + ', ' + str(m) + ')/'
+    # paths['type'] = paths['base'] + str(n) + ' x ' + str(m) + '/'
     paths['length'] = paths['type'] + 'N0 = ' + str(N_0) + '/'
     paths['pbc'] = paths['length'] + 'PBC/'
     
@@ -455,7 +456,8 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         simLines[32] = "cellBasisVector3    {0:<10}{1:<10}{2:.3f}\n".format(0., 0., z)
         simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format(0, 0, float(z)/2 )
 
-        simLines[16] = "set outputname     " + quoted(paths['tfinal'] + inFile) + "\n"
+        # simLines[16] = "set outputname     " + quoted(paths['tfinal'] + inFile) + "\n"
+        simLines[16] = "set outputname     " + quoted(inFile) + "\n"
         simLines[71] = "fixedAtomsFile      " + files['solvate-pdb'] + "\n"
         simLines[75] = "consref             " + files['restraint-pdb'] + "\n"
         simLines[76] = "conskfile            " + files['restraint-pdb'] + "\n"
@@ -484,7 +486,7 @@ def runSim(simPath, simFile, output = "waterSim"):
           + "Starting simulation.\n" \
           + "################################################################\n")
     
-    Namd2in=subprocess.Popen(["namd2", simFile], stdin=subprocess.PIPE)
+    Namd2in=subprocess.Popen(["namd2", simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
     Namd2in.stdin.flush()
     Namd2in.stdin.close
     Namd2in.communicate()
