@@ -456,12 +456,12 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format(0, 0, float(z)/2 )
 
         simLines[16] = "set outputname     " + quoted(paths['tfinal'] + inFile) + "\n"
-        simLines[71] = "fixedAtomsFile      " + quoted(files['solvate-pdb']) + "\n"
-        simLines[75] = "consref             " + quoted(files['restraint-pdb']) + "\n"
-        simLines[76] = "conskfile            " + quoted(files['restraint-pdb']) + "\n"
+        simLines[71] = "fixedAtomsFile      " + files['solvate-pdb'] + "\n"
+        simLines[75] = "consref             " + files['restraint-pdb'] + "\n"
+        simLines[76] = "conskfile            " + files['restraint-pdb'] + "\n"
         simLines[78] = "constraintScaling     " + "{:.2f}".format(1.00)
 
-        simLines[94] = "consforcefile         " + quoted(files['forcing-pdb']) + "\n"
+        simLines[94] = "consforcefile         " + files['forcing-pdb'] + "\n"
         simLines[100] = "minimize " + str(minimize) + "\n"
         simLines[102] = "run {:5d} \n".format(tf)
 
@@ -520,5 +520,5 @@ def main(FNAME, N_0, S, n, m, TEMP, LENGTH, FORCESTRENGTH, minimize):
     paths, files = restraintWrite(FNAME, paths, files)
     paths, files = forceWrite(FNAME, paths, files, FORCESTRENGTH)
     paths, files = simWrite(FNAME, paths, files, TEMP, LENGTH, minimize)
-    runSim(paths['tfinal'], quoted(files['sim-conf']), FNAME)
+    runSim(paths['tfinal'], files['sim-conf'], FNAME)
 
