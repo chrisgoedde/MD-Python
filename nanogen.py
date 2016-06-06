@@ -46,9 +46,8 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
     l = float((N_0-0.75))*s0*np.sqrt(3)
     
     paths = {}
-    paths['base'] = os.path.abspath('..') + '/' + inFile + '/Data/'
-    paths['type'] = paths['base'] + '(' + str(n) + ', ' + str(m) + ')/'
-    # paths['type'] = paths['base'] + str(n) + ' x ' + str(m) + '/'
+    paths['home'] = os.path.abspath('..')
+    paths['type'] = paths['home'] + '/Data/' + '(' + str(n) + ', ' + str(m) + ')/'
     paths['length'] = paths['type'] + 'N0 = ' + str(N_0) + '/'
     paths['pbc'] = paths['length'] + 'PBC/'
     
@@ -376,7 +375,13 @@ def forceWrite(inFile, paths, files, force):
 def restraintWrite(inFile, paths, files):
     # Generate a file that restrains each carbon atom to it's initial position with force constant k
 
-    paths['restraint'] = paths['solvate'] + 'R = ' + str(3.0) + '/'
+    kVal = 3.0
+    
+    if kVal == 0.0:
+        paths['restraint'] = paths['solvate'] + 'Fixed/'
+    
+    else:
+        paths['restraint'] = paths['solvate'] + 'R = ' + str(kVal) + '/'
     
     files['restraint-pdb'] = config(paths['restraint']) + inFile + '-restraint.pdb'
     
@@ -390,22 +395,34 @@ def restraintWrite(inFile, paths, files):
 
     else:
     
-        print("################################################################\n" \
-              + "Writing configuration file for restraint forcing.\n" \
-              + "################################################################\n")
+        if kVal == 0:
+            print("################################################################\n" \
+                  + "Writing configuration file for fixed nanotube.\n" \
+                  + "################################################################\n")
+        
+        else:
+            print("################################################################\n" \
+                  + "Writing configuration file for flexible nanotube with R = " + str(kVal) + ".\n" \
+                  + "################################################################\n")
+        
         
         if not os.path.exists(config(paths['restraint'])):
             os.makedirs(config(paths['restraint']))
 
-        kVal = 3.0
         with open (files['solvate-pdb']) as kFile:
             kfLines = kFile.readlines()
-
-        for i in range(1, len(kfLines)-1):
-            if "CNT" in kfLines[i]:
-                kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(kVal) + kfLines[i][60::]
-            else:
-                kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(0.00) + kfLines[i][60::]
+        
+        if kVal == 0.0:
+            for i in range(1, len(kfLines)-1):
+                if "CNT" in kfLines[i]:
+                    kfLines[i] = kfLines[i][0:62] + "1.00" + kfLines[i][66::]
+                        
+        else:
+            for i in range(1, len(kfLines)-1):
+                if "CNT" in kfLines[i]:
+                    kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(kVal) + kfLines[i][60::]
+                else:
+                    kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(0.00) + kfLines[i][60::]
 
         outkFile = open(files['restraint-pdb'], 'w')
         outkFile.writelines(kfLines)
@@ -444,7 +461,7 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         x, y, z = getCNTBasis(files['prebond-pdb'])
 
         # Read in lines of simulation file
-        with open(os.path.abspath('..') + "/Templates/sim_template.conf") as tempFile:
+        with open(paths['home'] + "/Templates/sim_template.conf") as tempFile:
             simLines = tempFile.readlines()
 
         simLines[12] = "structure          " + quoted(files['solvate-psf']) + "\n"
@@ -472,7 +489,7 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         outFile = open(files['sim-conf'], "w")
         outFile.writelines(simLines)
         outFile.close()
-        paramFile = os.path.abspath('..') + "/Templates/par_all27_prot_lipid.prm"
+        paramFile = paths['home'] + "/Templates/par_all27_prot_lipid.prm"
         shutil.copy(paramFile, paths['tfinal'])
         return paths, files
 
