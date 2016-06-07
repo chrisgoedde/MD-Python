@@ -23,8 +23,14 @@ proc fixNT {molnm} {
   mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
 
   set all0 [atomselect top all]
+
+  # Let nanotube be flexible by default; this will be changed later if necessary
   $all0 set beta 0
   
+  # Set the resid of the nanotube to 1
+
+  $all0 set resid 1
+
   set all [atomselect top all]
   $all writepsf $molnm.psf
   $all writepdb $molnm.pdb

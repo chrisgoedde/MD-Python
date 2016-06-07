@@ -32,6 +32,11 @@ def config(thePath):
 
     return thePath + 'Config Files/'
 
+def configFile(thePath, theFile):
+    """configFile takes a path and a file name and constructs the full path"""
+
+    return config(thePath) + theFile
+
 
 # VMD generation of nanotube and periodic boundary conditions
 def tubeGen(inFile, pbcFile, N_0, n, m):
@@ -40,9 +45,9 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
     dimensions n x m.  pbcFile is the name of the same nanotube but now with 
     periodic boundary conditions applied to it. """
 
-    #Bonds lengths of different armchair nanotubes in nanometers
+    # Bonds lengths of different armchair nanotubes in nanometers
     s0 = 0.1418
-    #calculates the length of the nanotube based on bond lengths
+    # calculates the length of the nanotube based on bond lengths
     l = float((N_0-0.75))*s0*np.sqrt(3)
     
     paths = {}
@@ -52,17 +57,27 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
     paths['pbc'] = paths['length'] + 'PBC/'
     
     files = {}
-    files['length-psf'] = config(paths['length']) + inFile + '.psf'
-    files['length-pdb'] = config(paths['length']) + inFile + '.pdb'
-    files['pbc-psf'] = config(paths['pbc']) + inFile + '.psf'
-    files['pbc-pdb'] = config(paths['pbc']) + inFile + '.pdb'
-    files['prebond-psf'] = config(paths['pbc']) + inFile + '-prebond.psf'
-    files['prebond-pdb'] = config(paths['pbc']) + inFile + '-prebond.pdb'
+    # files['length-psf'] = config(paths['length']) + inFile + '.psf'
+    # files['length-pdb'] = config(paths['length']) + inFile + '.pdb'
+    # files['pbc-psf'] = config(paths['pbc']) + inFile + '.psf'
+    # files['pbc-pdb'] = config(paths['pbc']) + inFile + '.pdb'
+    # files['prebond-psf'] = config(paths['pbc']) + inFile + '-prebond.psf'
+    # files['prebond-pdb'] = config(paths['pbc']) + inFile + '-prebond.pdb'
+    files['length-psf'] = inFile + '.psf'
+    files['length-pdb'] = inFile + '.pdb'
+    files['pbc-psf'] = inFile + '.psf'
+    files['pbc-pdb'] = inFile + '.pdb'
+    files['prebond-psf'] = inFile + '-prebond.psf'
+    files['prebond-pdb'] = inFile + '-prebond.pdb'
     
-    if os.path.isfile(files['pbc-psf']) \
-        and os.path.isfile(files['pbc-pdb']) \
-        and os.path.isfile(files['prebond-psf']) \
-        and os.path.isfile(files['prebond-pdb']):
+    # if os.path.isfile(files['pbc-psf']) \
+    #     and os.path.isfile(files['pbc-pdb']) \
+    #     and os.path.isfile(files['prebond-psf']) \
+    #     and os.path.isfile(files['prebond-pdb']):
+    if os.path.isfile(configFile(paths['pbc'], files['pbc-psf'])) \
+        and os.path.isfile(configFile(paths['pbc'], files['pbc-pdb'])) \
+        and os.path.isfile(configFile(paths['pbc'], files['prebond-psf'])) \
+        and os.path.isfile(configFile(paths['pbc'], files['prebond-pdb'])):
         
         print("################################################################\n" \
               + "Configuration files already exist in:\n" + config(paths['pbc']) + ".\n" \
@@ -126,11 +141,13 @@ def solvate(inFile, N_0, S, n, m):
 
     paths['solvate'] = paths['pbc'] + 'S = ' + str(S) + '/'
     
-    files['solvate-pdb'] = config(paths['solvate']) + inFile + '-solv.pdb'
-    files['solvate-psf'] = config(paths['solvate']) + inFile + '-solv.psf'
-    
-    if os.path.isfile(files['solvate-psf']) \
-        and os.path.isfile(files['solvate-pdb']):
+    # files['solvate-pdb'] = config(paths['solvate']) + inFile + '-solv.pdb'
+    # files['solvate-psf'] = config(paths['solvate']) + inFile + '-solv.psf'
+    files['solvate-pdb'] = inFile + '-solv.pdb'
+    files['solvate-psf'] = inFile + '-solv.psf'
+   
+    if os.path.isfile(configFile(paths['solvate'], files['solvate-psf'])) \
+        and os.path.isfile(configFile(paths['solvate'], files['solvate-pdb'])):
     
         print("################################################################\n" \
               + "Configuration files already exist in:\n" + config(paths['solvate']) + ".\n" \
@@ -148,9 +165,9 @@ def solvate(inFile, N_0, S, n, m):
             os.makedirs(config(paths['solvate']))
     
         # Opens input nanotube psf and pdb files, and reads all the lines of each file into lists
-        with open(files['pbc-psf']) as psfFile:
+        with open(configFile(paths['pbc'], files['pbc-psf'])) as psfFile:
             psfLines = psfFile.readlines()
-        with open(files['pbc-pdb']) as pdbFile:
+        with open(configFile(paths['pbc'], files['pbc-pdb'])) as pdbFile:
             pdbLines = pdbFile.readlines()
 
         # Grabs the lengths of each of the lists
@@ -160,9 +177,9 @@ def solvate(inFile, N_0, S, n, m):
         # String formats for the PSF and PDB file writing
         # Pdb
         dampingCoeff = 0.00
-        oxygen = "ATOM{0:>7}  OH2 TIP3            0.000   0.000{1:>8.3f}  0.00  0.00      TUB  O\n"
-        hydro1 = "ATOM{0:>7}  H1  TIP3            0.000   0.766{1:>8.3f}  0.00  0.00      TUB  H\n"
-        hydro2 = "ATOM{0:>7}  H2  TIP3            0.000  -0.766{1:>8.3f}  0.00  0.00      TUB  H\n"
+        oxygen = "ATOM{0:>7}  OH2 TIP3 {1:4.0f}      0.000   0.000{2:>8.3f}  0.00  0.00      TUB  O\n"
+        hydro1 = "ATOM{0:>7}  H1  TIP3 {1:4.0f}      0.000   0.766{2:>8.3f}  0.00  0.00      TUB  H\n"
+        hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}      0.000  -0.766{2:>8.3f}  0.00  0.00      TUB  H\n"
 
         # Psf
         opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
@@ -297,23 +314,23 @@ def solvate(inFile, N_0, S, n, m):
 
         for i in range(0,3*(N_0+S), 3):
             if i==0:
-                pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, 0.000)
-                pdbLines.append( hydro1.format(nAtoms+(i+2), 0.570) )
-                pdbLines.append( hydro2.format(nAtoms+(i+3), 0.570) )
+                pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, i/3+2, 0.000)
+                pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, 0.570) )
+                pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, 0.570) )
             
             else:
-                pdbLines.append( oxygen.format(nAtoms+i+1, ((i/3)*dist*sFactorAdjust)) )
-                pdbLines.append( hydro1.format(nAtoms+(i+2), 0.570+((i/3)*dist*sFactorAdjust)) )
-                pdbLines.append( hydro2.format(nAtoms+(i+3), 0.570+((i/3)*dist*sFactorAdjust)) )
+                pdbLines.append( oxygen.format(nAtoms+i+1, i/3+2, ((i/3)*dist*sFactorAdjust)) )
+                pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, 0.570+((i/3)*dist*sFactorAdjust)) )
+                pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, 0.570+((i/3)*dist*sFactorAdjust)) )
 
         # Writes the new pdb lines to a new pdb file
         pdbLines.append("END\n")
-        pdbOut = open(files['solvate-pdb'], 'w')
+        pdbOut = open(configFile(paths['solvate'], files['solvate-pdb']), 'w')
         pdbOut.writelines(pdbLines)
         pdbOut.close()
 
         # Writes the new psf lines to a new psf file
-        psfOut = open(files['solvate-psf'], 'w')
+        psfOut = open(configFile(paths['solvate'], files['solvate-psf']), 'w')
         psfOut.writelines(preAtoms)
         psfOut.writelines(psfLines[atomIndex])
         psfOut.writelines(atoms)
@@ -332,9 +349,10 @@ def forceWrite(inFile, paths, files, force):
 
     paths['forcing'] = paths['restraint'] + 'F = ' + str(force) + '/'
     
-    files['forcing-pdb'] = config(paths['forcing']) + inFile + '-forcing.pdb'
+    # files['forcing-pdb'] = config(paths['forcing']) + inFile + '-forcing.pdb'
+    files['forcing-pdb'] = inFile + '-forcing.pdb'
     
-    if os.path.isfile(files['forcing-pdb']):
+    if os.path.isfile(configFile(paths['forcing'], files['forcing-pdb'])):
         
         print("################################################################\n" \
               + "Configuration files already exist in:\n" + config(paths['forcing']) + ".\n" \
@@ -354,7 +372,7 @@ def forceWrite(inFile, paths, files, force):
         forceVal = "{0:.2f}".format(force)
         forceVal = forceVal[0:4]
 
-        with open (files['solvate-pdb']) as f:
+        with open (configFile(paths['solvate'], files['solvate-pdb'])) as f:
             flines = f.readlines()
 
         for i in range(1, len(flines)-1):
@@ -365,7 +383,7 @@ def forceWrite(inFile, paths, files, force):
             else:
                 flines[i] = flines[i][0:56] + "0.00" + flines[i][60::]
 
-        outFile = open(files['forcing-pdb'], 'w')
+        outFile = open(configFile(paths['forcing'], files['forcing-pdb']), 'w')
         outFile.writelines(flines)
         outFile.close()
 
@@ -383,9 +401,10 @@ def restraintWrite(inFile, paths, files):
     else:
         paths['restraint'] = paths['solvate'] + 'R = ' + str(kVal) + '/'
     
-    files['restraint-pdb'] = config(paths['restraint']) + inFile + '-restraint.pdb'
+    # files['restraint-pdb'] = config(paths['restraint']) + inFile + '-restraint.pdb'
+    files['restraint-pdb'] = inFile + '-restraint.pdb'
     
-    if os.path.isfile(files['restraint-pdb']):
+    if os.path.isfile(configFile(paths['restraint'], files['restraint-pdb'])):
         
         print("################################################################\n" \
               + "Configuration files already exist in:\n" + config(paths['restraint']) + ".\n" \
@@ -409,7 +428,7 @@ def restraintWrite(inFile, paths, files):
         if not os.path.exists(config(paths['restraint'])):
             os.makedirs(config(paths['restraint']))
 
-        with open (files['solvate-pdb']) as kFile:
+        with open (configFile(paths['solvate'], files['solvate-pdb'])) as kFile:
             kfLines = kFile.readlines()
         
         if kVal == 0.0:
@@ -424,7 +443,7 @@ def restraintWrite(inFile, paths, files):
                 else:
                     kfLines[i] = kfLines[i][0:56] + "{:.2f}".format(0.00) + kfLines[i][60::]
 
-        outkFile = open(files['restraint-pdb'], 'w')
+        outkFile = open(configFile(paths['restraint'], files['restraint-pdb']), 'w')
         outkFile.writelines(kfLines)
         outkFile.close()
 
@@ -458,7 +477,7 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
             os.makedirs(paths['tfinal'])
 
         # Grabs the CNT basis vectors
-        x, y, z = getCNTBasis(files['prebond-pdb'])
+        x, y, z = getCNTBasis(config(paths['pbc']) + files['prebond-pdb'])
 
         # Read in lines of simulation file
         with open(paths['home'] + "/Templates/sim_template.conf") as tempFile:
@@ -491,6 +510,11 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         outFile.close()
         paramFile = paths['home'] + "/Templates/par_all27_prot_lipid.prm"
         shutil.copy(paramFile, paths['tfinal'])
+
+        os.link(configFile(paths['solvate'], files['solvate-pdb']), paths['tfinal'] + files['solvate-pdb'])
+        os.link(configFile(paths['solvate'], files['solvate-psf']), paths['tfinal'] + files['solvate-psf'])
+        os.link(configFile(paths['restraint'], files['restraint-pdb']), paths['tfinal'] + files['restraint-pdb'])
+        os.link(configFile(paths['forcing'], files['forcing-pdb']), paths['tfinal'] + files['forcing-pdb'])
         return paths, files
 
 
