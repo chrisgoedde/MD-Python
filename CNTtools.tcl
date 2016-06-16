@@ -62,7 +62,9 @@ proc removeLangevinWater {molnm} {
 }
 
 proc pbcNT {molnm fileOut ntype} {
-    # Credit to Tom Sisan from Northwestern University
+    # Based on procedure from Tom Sisan from Northwestern University
+    # Modified by CGG Spring/Summer 2016
+    
     # Read in cnt that does not have periodic bonds.
     mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
     mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
@@ -114,8 +116,26 @@ proc pbcNT {molnm fileOut ntype} {
     set dihedrals 1
     ::inorganicBuilder::buildAnglesDihedrals $fname0 $fname $dihedrals
 
-    # # Not sure why the below is here. Maybe I use it in the calling space.
-    # ::inorganicBuilder::setVMDPeriodicBox $mybox
-    # return $fname
+    # Added this code to fix up the pbc box in the pdb file
+    mol new [file normalize $fname.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize $fname.pdb] type pdb autobonds off waitfor all
+
+    set mymol [ atomselect top all ]
+
+    set cell [ lindex [ pbc get ] 0 ]
+    set X [ lindex $a 0 ]
+    set Y [ lindex $b 1 ]
+    set Z [ lindex $c 2 ]
+    
+    lset cell 0 $X
+    lset cell 1 $Y
+    lset cell 2 $Z
+    
+    pbc set $cell
+    
+    set newCell [ lindex [ pbc get ] 0 ]
+    
+    $mymol writepdb $fname.pdb
+    $mymol writepsf $fname.psf
 
 }
