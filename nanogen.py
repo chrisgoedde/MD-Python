@@ -182,9 +182,13 @@ def solvate(inFile, N_0, S, n, m):
         hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}      0.000  -0.766{2:>8.3f}  0.00  0.00      TUB  H\n"
 
         # Psf
-        opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
-        h1psf = "   {0:>5} TUB {1:>5} TIP3 H1   HT     0.417000        1.0080           0\n"
-        h2psf = "   {0:>5} TUB {1:>5} TIP3 H2   HT     0.417000        1.0080           0\n"
+        # opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
+        # h1psf = "   {0:>5} TUB {1:>5} TIP3 H1   HT     0.417000        1.0080           0\n"
+        # h2psf = "   {0:>5} TUB {1:>5} TIP3 H2   HT     0.417000        1.0080           0\n"
+
+        opsf  = "   {0:>5} WTR  {1:<4} TIP3 OH2  OT    -0.834000       15.9994           0\n"
+        h1psf = "   {0:>5} WTR  {1:<4} TIP3 H1   HT     0.417000        1.0080           0\n"
+        h2psf = "   {0:>5} WTR  {1:<4} TIP3 H2   HT     0.417000        1.0080           0\n"
 
         # String format for the bonds and angles in the psf file
         sBondFormat  = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}\n"
@@ -269,9 +273,9 @@ def solvate(inFile, N_0, S, n, m):
 
         # Adds the new atoms to the original list of atoms
         for i in range(nAtoms+1, (3*(N_0+S)) + nAtoms+1, 3):
-            atoms.append(opsf.format(i, i))
-            atoms.append(h1psf.format(i+1, i+1))
-            atoms.append(h2psf.format(i+2, i+2))
+            atoms.append(opsf.format(i, int((i-nAtoms)/3)+2))
+            atoms.append(h1psf.format(i+1, int((i-nAtoms)/3)+2))
+            atoms.append(h2psf.format(i+2, int((i-nAtoms)/3)+2))
 
             intAngles.append(str(i+1))
             intAngles.append(str(i))
@@ -285,8 +289,9 @@ def solvate(inFile, N_0, S, n, m):
         # Formats the list of bonds into the psf format with 8 columns
         for i in range(0,len(intBonds),8):
             try:
-                bondsFinal.append( sBondFormat.format(intBonds[i], intBonds[i+1], intBonds[i+2], intBonds[i+3],
-                    intBonds[i+4], intBonds[i+5], intBonds[i+6], intBonds[i+7]) )
+                bondsFinal.append( sBondFormat.format(intBonds[i], intBonds[i+1],
+                    intBonds[i+2], intBonds[i+3], intBonds[i+4], intBonds[i+5],
+                    intBonds[i+6], intBonds[i+7]) )
 
             except:
                 diff = len(intBonds) - i
@@ -299,8 +304,9 @@ def solvate(inFile, N_0, S, n, m):
         # Formates the list of angles into the psf format with 9 columns
         for i in range(0, len(intAngles), 9):
             try:
-                anglesFinal.append( sAngleFormat.format(intAngles[i], intAngles[i+1], intAngles[i+2], intAngles[i+3],
-                    intAngles[i+4], intAngles[i+5], intAngles[i+6], intAngles[i+7], intAngles[i+8]) )
+                anglesFinal.append( sAngleFormat.format(intAngles[i], intAngles[i+1],
+                    intAngles[i+2], intAngles[i+3], intAngles[i+4], intAngles[i+5],
+                    intAngles[i+6], intAngles[i+7], intAngles[i+8]) )
         
             except:
                 diff = len(intAngles) - i
@@ -490,7 +496,8 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         simLines[30] = "cellBasisVector1    {0:<10.3f}{1:<10}{2:}\n".format(x, 0., 0.)
         simLines[31] = "cellBasisVector2    {0:<10}{1:<10.3f}{2:}\n".format(0., y, 0.)
         simLines[32] = "cellBasisVector3    {0:<10}{1:<10}{2:.3f}\n".format(0., 0., z)
-        simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format(0, 0, float(z)/2 )
+        # simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format(0, 0, float(z)/2 )
+        simLines[33] = "cellOrigin          {0:<10}{1:<10}{2:.3f}\n\n".format(0, 0, 0)
 
         # simLines[16] = "set outputname     " + quoted(paths['tfinal'] + inFile) + "\n"
         simLines[16] = "set outputname     " + quoted(inFile) + "\n"
@@ -527,14 +534,22 @@ def runSim(simPath, simFile, output = "waterSim"):
           + "Starting simulation.\n" \
           + "################################################################\n")
     
+    startTime = time.time()
+
     Namd2in=subprocess.Popen(["namd2", simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
     Namd2in.stdin.flush()
     Namd2in.stdin.close
     Namd2in.communicate()
+    
+    elapsedTime = time.time() - startTime
+    
     if Namd2in.returncode==0:
         print("################################################################\n" \
               + "Simulation finished\nSimulation file saved into " \
               + simPath.replace(".conf", ".dcd") + ".\n" \
+              + "Elapsed time: " + "{:.0f}".format(elapsedTime) + " s = " \
+              + "{:.1f}".format(elapsedTime/60) + " m = " \
+              + "{:.1f}".format(elapsedTime/3600) + " h\n" \
               + "################################################################\n")
     else:
         print("################################################################\n" \
