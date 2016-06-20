@@ -37,8 +37,461 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
 
+def cntWrite(paths, fileName, N0, n, m):
+    """ nanoWrite creates a periodic nanotube with the following input parameters:
+    fileName is the name of the initial nanotube with number of rings N0 and
+    dimensions n x m."""
 
-# VMD generation of nanotube and periodic boundary conditions
+    # Bonds lengths of different armchair nanotubes in nanometers
+    s0 = 0.1418
+    # calculates the length of the nanotube based on bond lengths
+    l = float(N0-0.75) * s0 * np.sqrt(3)
+
+    if os.path.isfile(configFile(paths['pbc'], fileName + '.psf')) \
+        and os.path.isfile(configFile(paths['pbc'], fileName + '.pdb')):
+
+        
+        print("################################################################\n" \
+            + "Configuration files already exist in:\n" + config(paths['pbc']) + ".\n" \
+            + "################################################################\n")
+
+        return
+
+    print("################################################################\n" \
+        + "Running VMD to generate nanotube configuration files.\n" \
+        + "################################################################\n")
+
+    if not os.path.exists(config(paths['N0'])):
+        os.makedirs(config(paths['N0']))
+    if not os.path.exists(config(paths['pbc'])):
+        os.makedirs(config(paths['pbc']))
+        
+    # Create the nanotube in VMD
+
+    logFile = open(config(paths['N0']) + fileName + ".log", "w")
+
+    # Opening a pipe to VMD in the shell
+    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                       stdout=logFile)
+
+    sourceCNT = "source CNTtools.tcl\n"
+    CNTtools = "package require CNTtools 1.0\n"
+
+    genNT = "genNT " + quoted(fileName) + " " + quoted(config(paths['N0'])) + " " \
+        + str(l) + " " + str(n) + " " + str(m) + "\n"
+
+    # run commands through pipe and saves to file
+    VMDin.stdin.write(sourceCNT)
+    VMDin.stdin.write(CNTtools)
+    VMDin.stdin.write(genNT)
+    VMDin.stdin.flush()
+    VMDin.stdin.close
+    VMDin.communicate()
+
+    # Make the nanotube periodic in VMD
+
+    logFile = open(config(paths['pbc']) + fileName + ".log", "w")
+
+    # Opening a pipe to VMD in the shell
+    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                       stdout=logFile)
+
+    sourceCNT = "source CNTtools.tcl\n"
+    CNTtools = "package require CNTtools 1.0\n"
+    pbcNT = "pbcNT " + quoted(config(paths['N0']) + fileName) + " " \
+        + quoted(config(paths['pbc']) + fileName) + " default\n"
+
+    # run commands through pipe and saves to file
+    VMDin.stdin.write(sourceCNT)
+    VMDin.stdin.write(CNTtools)
+    VMDin.stdin.write(pbcNT)
+    VMDin.stdin.flush()
+    VMDin.stdin.close
+    VMDin.communicate()
+        
+def waterWrite(paths, fileName, N0, S):
+    """ waterWrite adds N0 + S water molecules to the inside of the nanotube,
+        then write out new psf and pdb files for the nanotube. """
+
+    if os.path.isfile(configFile(paths['solvate'], fileName + '.psf')) \
+        and os.path.isfile(configFile(paths['solvate'], fileName + '.pdb')):
+    
+        print("################################################################\n" \
+            + "Configuration files already exist in:\n" + config(paths['solvate']) + ".\n" \
+            + "################################################################\n")
+        
+        return
+        
+    print("################################################################\n" \
+        + "Adding water to the CNT and writing configuration files.\n" \
+        + "################################################################\n")
+
+    if not os.path.exists(config(paths['solvate'])):
+        os.makedirs(config(paths['solvate']))
+
+    # Opens input nanotube psf and pdb files, and reads all the lines of each file into lists
+    with open(configFile(paths['pbc'], fileName + '.psf')) as psfFile:
+        psfLines = psfFile.readlines()
+    with open(configFile(paths['pbc'], fileName + '.pdb')) as pdbFile:
+        pdbLines = pdbFile.readlines()
+
+    # Grabs the lengths of each of the lists
+    lenPsf = len(psfLines)
+    lenPdb = len(pdbLines)
+
+    # String formats for the PSF and PDB file writing
+    # Pdb
+    dampingCoeff = 0.00
+    oxygen = "ATOM{0:>7}  OH2 TIP3 {1:4.0f}       0.000   0.000{2:>8.3f}  0.00  0.00      WTR  O\n"
+    hydro1 = "ATOM{0:>7}  H1  TIP3 {1:4.0f}       0.000   0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
+    hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}       0.000  -0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
+
+    # Psf
+    # opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
+    # h1psf = "   {0:>5} TUB {1:>5} TIP3 H1   HT     0.417000        1.0080           0\n"
+    # h2psf = "   {0:>5} TUB {1:>5} TIP3 H2   HT     0.417000        1.0080           0\n"
+
+    opsf  = "   {0:>5} WTR  {1:<4} TIP3 OH2  OT    -0.834000       15.9994           0\n"
+    h1psf = "   {0:>5} WTR  {1:<4} TIP3 H1   HT     0.417000        1.0080           0\n"
+    h2psf = "   {0:>5} WTR  {1:<4} TIP3 H2   HT     0.417000        1.0080           0\n"
+
+    # String format for the bonds and angles in the psf file
+    sBondFormat  = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}\n"
+    sAngleFormat = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}{8: >8}\n"
+
+    # Bonds lengths for different armchair nanotubes, now in Angstroms
+    s0 = 1.418
+    
+    # Calculates the apothem of each regular hexagon in the nanotube and then
+    # calculates the distance between the center of each ring in the tube
+    #apothem = s*np.sqrt(3)/2
+    l = float(N0-0.75) * s0 * np.sqrt(3)
+    dist = s0*np.sqrt(3)
+
+    # Initializing lists used below
+    atoms = []
+    bonds = []
+    angles = []
+    preAtoms = []    
+    postAngles = []
+
+    intBonds = []
+    bondsFinal = []
+    intAngles = []
+    anglesFinal = []
+
+    # Finds the original number of atoms in the Pdb file
+    nAtoms = lenPdb-2
+    # Calculates the new number of atoms after solvating
+    newAtoms = nAtoms + (3*(N0+S)) 
+    # Calculates the new number of bonds and angles after solvating
+    newBonds = int(nAtoms*(3./2)) + 2*(N0+S)
+    newAngles = nAtoms*3 + (N0+S)
+
+    # Iterates through all of the lines of the input Psf file, and records the
+    # index of the lines that contain the string !NATOM, !NBOND, and !NTHETA,
+    # as wella as changes the line to update the new number of each
+    for i in range(0, lenPsf):
+        if "!NATOM" in psfLines[i]:
+            psfLines[i] = "     {:3d} !NATOM\n".format( newAtoms )
+            atomIndex = i
+        elif "!NBOND" in psfLines[i]:
+            psfLines[i] = "     {:3d} !NBOND: bonds\n".format( newBonds )
+            bondIndex = i
+        elif "!NTHETA" in psfLines[i]:
+            psfLines[i] = "     {:3d} !NTHETA: angles\n".format( newAngles )
+            angleIndex = i
+
+    # Stores all of the original text lines that come before the atom section into a list
+    for i in range(0, atomIndex):
+        preAtoms.append(psfLines[i])
+
+    # Stores the atoms into a list
+    count = 1
+    while psfLines[atomIndex+count].strip():
+        atoms.append( psfLines[atomIndex+count] )
+        count+=1
+    # Stores the bonds into a list
+    count = 1
+    while psfLines[bondIndex+count].strip():
+        bonds.append( psfLines[bondIndex+count] )
+        count+=1
+    # Stores the angles into a list
+    count = 1
+    while psfLines[angleIndex+count].strip():
+        angles.append( psfLines[angleIndex+count] )
+        count+=1
+    # Stores all the text lines after the angles into a list
+    for i in range(angleIndex+count, lenPsf):
+        postAngles.append(psfLines[i])
+
+    # Takes the bonds and angles in the original file and splits each line into individual numbers
+    for bond in bonds:
+        intBonds.append( bond.strip("\n").split() )
+    for angle in angles:
+        intAngles.append( angle.strip("\n").split() )
+
+    # Compresses the list of lists into a single list of all of the angles and bonds in the original file
+    intBonds = list(chain.from_iterable(intBonds))
+    intAngles = list(chain.from_iterable(intAngles))    
+
+    # Adds the new atoms to the original list of atoms
+    for i in range(nAtoms+1, (3*(N0+S)) + nAtoms+1, 3):
+        atoms.append(opsf.format(i, int((i-nAtoms)/3)+2))
+        atoms.append(h1psf.format(i+1, int((i-nAtoms)/3)+2))
+        atoms.append(h2psf.format(i+2, int((i-nAtoms)/3)+2))
+
+        intAngles.append(str(i+1))
+        intAngles.append(str(i))
+        intAngles.append(str(i+2))
+
+        intBonds.append(str(i))
+        intBonds.append(str(i+1))
+        intBonds.append(str(i))
+        intBonds.append(str(i+2))
+
+    # Formats the list of bonds into the psf format with 8 columns
+    for i in range(0,len(intBonds),8):
+        try:
+            bondsFinal.append( sBondFormat.format(intBonds[i], intBonds[i+1],
+                intBonds[i+2], intBonds[i+3], intBonds[i+4], intBonds[i+5],
+                intBonds[i+6], intBonds[i+7]) )
+
+        except:
+            diff = len(intBonds) - i
+            tempStr = ""
+            for j in range(i, i+diff):
+                tempStr = tempStr + "{:>8}".format(intBonds[j])
+
+            bondsFinal.append( " " + tempStr + "\n" )
+
+    # Formates the list of angles into the psf format with 9 columns
+    for i in range(0, len(intAngles), 9):
+        try:
+            anglesFinal.append( sAngleFormat.format(intAngles[i], intAngles[i+1],
+                intAngles[i+2], intAngles[i+3], intAngles[i+4], intAngles[i+5],
+                intAngles[i+6], intAngles[i+7], intAngles[i+8]) )
+    
+        except:
+            diff = len(intAngles) - i
+            tempStr = ""
+            for j in range(i, i+diff):
+                tempStr = tempStr + "{:>8}".format(intAngles[j])
+
+            anglesFinal.append( " " + tempStr + "\n" )
+
+    sFactorAdjust = float(N0) / (N0 + S)
+
+    for i in range(0,3*(N0+S), 3):
+        if i==0:
+            pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, i/3+2, 0.000)
+            pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, 0.570) )
+            pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, 0.570) )
+        
+        else:
+            pdbLines.append( oxygen.format(nAtoms+i+1, i/3+2, ((i/3)*dist*sFactorAdjust)) )
+            pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, 0.570+((i/3)*dist*sFactorAdjust)) )
+            pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, 0.570+((i/3)*dist*sFactorAdjust)) )
+
+    # Writes the new pdb lines to a new pdb file
+    pdbLines.append("END\n")
+    pdbOut = open(configFile(paths['solvate'], fileName + '.pdb'), 'w')
+    pdbOut.writelines(pdbLines)
+    pdbOut.close()
+
+    # Writes the new psf lines to a new psf file
+    psfOut = open(configFile(paths['solvate'], fileName + '.psf'), 'w')
+    psfOut.writelines(preAtoms)
+    psfOut.writelines(psfLines[atomIndex])
+    psfOut.writelines(atoms)
+    psfOut.writelines("\n" + psfLines[bondIndex])
+    psfOut.writelines(bondsFinal)
+    psfOut.writelines("\n" + psfLines[angleIndex])
+    psfOut.writelines(anglesFinal)
+    psfOut.writelines(postAngles)
+    psfOut.close()
+
+    print("################################################################\n" \
+        + "Post-processing the CNT and rewriting configuration files.\n" \
+        + "################################################################\n")
+
+    logFile = open(config(paths['solvate']) + fileName + ".log", "w")
+
+    # Opening a pipe to VMD in the shell
+    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                           stdout=logFile)
+
+    sourceCNT = "source CNTtools.tcl\n"
+    CNTtools = "package require CNTtools 1.0\n"
+
+    fixNT = "fixNT " + quoted(config(paths['pbc']) + fileName) + "\n"
+
+    removeLangevinWater = "removeLangevinWater " + quoted(config(paths['pbc']) + fileName) + "\n"
+
+    VMDin.stdin.write(sourceCNT)
+    VMDin.stdin.write(CNTtools)
+    # VMDin.stdin.write(fixNT)
+    # VMDin.stdin.write(removeLangevinWater)
+
+    # finished creating periodic nanotubes in VMD
+    VMDin.stdin.flush()
+    VMDin.stdin.close
+    VMDin.communicate()
+    
+def pdbWrite(paths, fileName, name, value):
+    
+    if os.path.isfile(configFile(paths[name], fileName + '.pdb')):
+        
+        print("################################################################\n" \
+              + "Configuration files already exist in:\n" + config(paths[name]) + ".\n" \
+              + "################################################################\n")
+              
+        return
+
+    print("################################################################\n" \
+          + "Writing configuration file in:\n" + config(paths[name]) + ".\n" \
+          + "################################################################\n")
+    
+    
+    if not os.path.exists(config(paths[name])):
+        os.makedirs(config(paths[name]))
+
+    # Opening a pipe to VMD in the shell
+    logFile = open(config(paths[name]) + fileName + ".log", "w")
+    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                           stdout=logFile)
+
+    sourceCNT = "source CNTtools.tcl\n"
+    CNTtools = "package require CNTtools 1.0\n"
+
+    tclName = "NT" + name + " " + quoted(config(paths['solvate']) + fileName) + " " \
+        + quoted(config(paths[name]) + fileName) + " " + str(value) + "\n"
+
+    VMDin.stdin.write(sourceCNT)
+    VMDin.stdin.write(CNTtools)
+    VMDin.stdin.write(tclName)
+    VMDin.stdin.flush()
+    VMDin.stdin.close
+    VMDin.communicate()
+
+def confWrite(paths, fileName, restraint, temp, duration, minDuration):
+    """ confWrite generates a .conf file to use as input to namd2. To organize simulations
+    with different parameters, confWrite will create a directory for the simulation."""
+
+    confFile = paths['tfinal'] + fileName + '.conf'
+
+    if os.path.isfile(confFile):
+    
+        print("################################################################\n" \
+              + "NAMD configuration file " + confFile + " already exists.\n" \
+              + "################################################################\n")
+        
+        return confFile
+          
+    print("################################################################\n" \
+          + "Writing NAMD configuration file " + confFile + ".\n" \
+          + "################################################################\n")
+      
+    if not os.path.exists(paths['tfinal']):
+        os.makedirs(paths['tfinal'])
+
+    # Grabs the CNT basis vectors
+    x, y, z = getCNTBasis(config(paths['pbc']) + fileName + '.pdb')
+
+    outFile = open(confFile, "w")
+    
+    outFile.write("# Set up periodic boundary conditions\n\n")
+    
+    outFile.write("cellBasisVector1    {0:>10.3f}{1:>10.3f}{2:>10.3f}\n".format(x, 0., 0.))
+    outFile.write("cellBasisVector2    {0:>10.3f}{1:>10.3f}{2:>10.3f}\n".format(0., y, 0.))
+    outFile.write("cellBasisVector3    {0:>10.3f}{1:>10.3f}{2:>10.3f}\n".format(0., 0., z))
+    outFile.write("cellOrigin          {0:>10}{1:>10}{2:>10}\n\n".format(0, 0, 0))
+    
+    outFile.write("{0:<20}".format("wrapWater") + "on" + "\n")
+    outFile.write("{0:<20}".format("wrapAll") + "on" + "\n")
+    outFile.write("\n")
+
+    outFile.write("# Set the input and output files\n\n")
+    
+    outFile.write("{0:<20}".format("structure") + fileName + '.psf' + "\n")
+    outFile.write("{0:<20}".format("coordinates") + fileName + '.pdb' + "\n")
+    outFile.write("{0:<20}".format("outputname") + fileName + "\n")
+    outFile.write("\n")
+    
+    outFile.write("# Set the force field parameters\n\n")
+    
+    outFile.write("{0:<20}".format("paraTypeCharmm") + "on" + "\n")
+    outFile.write("{0:<20}".format("parameters") + "par_all27_prot_lipid.prm" + "\n") 
+    outFile.write("{0:<20}".format("exclude") + "scaled1-4" + "\n")
+    outFile.write("{0:<20}".format("cutoff") + "12.0" + "\n")
+    outFile.write("{0:<20}".format("pairlistdist") + "14.0" + "\n")
+    outFile.write("{0:<20}".format("switching") + "on" + "\n")
+    outFile.write("{0:<20}".format("switchdist") + "10.0" + "\n")
+    outFile.write("\n")
+
+    outFile.write("# Set the integration parameters\n\n")
+    outFile.write("{0:<20}".format("timestep") + "1" + "\n")
+    outFile.write("{0:<20}".format("nonbondedFreq") + "2" + "\n")
+    outFile.write("{0:<20}".format("fullElectFrequency") + "4" + "\n")
+    outFile.write("{0:<20}".format("stepspercycle") + "20" + "\n")
+    outFile.write("{0:<20}".format("rigidBonds") + "water" + "\n")
+
+    outFile.write("\n")
+
+    outFile.write("{0:<20}".format("restartfreq") + "100" + "\n")
+    outFile.write("{0:<20}".format("dcdfreq") + "100" + "\n")
+    outFile.write("{0:<20}".format("veldcdfreq") + "100" + "\n")
+    outFile.write("{0:<20}".format("outputEnergies") + "100" + "\n")
+    outFile.write("\n")
+
+    outFile.write("# Set the restraints on the carbon\n\n")
+    
+    if restraint == 0:
+        outFile.write("{0:<20}".format("fixedAtoms") + "on" + "\n")
+        outFile.write("{0:<20}".format("fixedAtomsFile") + fileName + '-restraint.pdb' + "\n")
+        outFile.write("{0:<20}".format("fixedAtomsCol") + "B" + "\n")
+    else:
+        outFile.write("{0:<20}".format("constraints") + "on" + "\n")
+        outFile.write("{0:<20}".format("consref") + fileName + '-restraint.pdb' + "\n")
+        outFile.write("{0:<20}".format("conskfile") + fileName + '-restraint.pdb' + "\n")
+        outFile.write("{0:<20}".format("conskcol") + "O" + "\n")
+
+    outFile.write("\n")
+    
+    outFile.write("# Set the external forcing\n\n")
+    
+    outFile.write("{0:<20}".format("constantForce") + "yes" + "\n")
+    outFile.write("{0:<20}".format("consForceFile") + fileName + '-forcing.pdb' + "\n")
+    outFile.write("{0:<20}".format("consForceScaling") + "0.014392631" + "\n")
+    outFile.write("\n")
+
+    outFile.write("# Set the Langevin thermostat\n\n")
+    
+    outFile.write("{0:<20}".format("langevin") + "on" + "\n")
+    outFile.write("{0:<20}".format("langevinFile") + fileName + '-langevin.pdb' + "\n")
+    outFile.write("{0:<20}".format("langevinCol") + "O" + "\n")
+    outFile.write("{0:<20}".format("langevinTemp") + str(temp) + "\n")
+    outFile.write("\n")
+
+    outFile.write("# Set the execution parameters\n\n")
+
+    outFile.write("{0:<20}".format("temperature") + str(temp) + "\n")
+    outFile.write("{0:<20}".format("minimize") + str(minDuration) + "\n")
+    outFile.write("{0:<20}".format("reinitvels") + str(temp) + "\n")
+    outFile.write("{0:<20}".format("run") + str(duration) + "\n")
+    
+    outFile.close()
+    paramFile = paths['home'] + "Templates/par_all27_prot_lipid.prm"
+    shutil.copy(paramFile, paths['tfinal'])
+
+    os.link(configFile(paths['solvate'], fileName + '.pdb'), paths['tfinal'] + fileName + '.pdb')
+    os.link(configFile(paths['solvate'], fileName + '.psf'), paths['tfinal'] + fileName + '.psf')
+    os.link(configFile(paths['restraint'], fileName + '.pdb'), paths['tfinal'] + fileName + '-restraint.pdb')
+    os.link(configFile(paths['forcing'], fileName + '.pdb'), paths['tfinal'] + fileName + '-forcing.pdb')
+    os.link(configFile(paths['temperature'], fileName + '.pdb'), paths['tfinal'] + fileName + '-langevin.pdb')
+    
+    return confFile
+    
 def tubeGen(inFile, pbcFile, N_0, n, m):
     """ tubeGen creates a periodic nanotube with the following input parameters:
     inFile is the name of the initial nanotube with number of rings N_0 and
@@ -143,8 +596,8 @@ def solvate(inFile, N_0, S, n, m):
     
     # files['solvate-pdb'] = config(paths['solvate']) + inFile + '-solv.pdb'
     # files['solvate-psf'] = config(paths['solvate']) + inFile + '-solv.psf'
-    files['solvate-pdb'] = inFile + '-solv.pdb'
-    files['solvate-psf'] = inFile + '-solv.psf'
+    files['solvate-pdb'] = inFile + '.pdb'
+    files['solvate-psf'] = inFile + '.psf'
    
     if os.path.isfile(configFile(paths['solvate'], files['solvate-psf'])) \
         and os.path.isfile(configFile(paths['solvate'], files['solvate-pdb'])):
@@ -177,9 +630,9 @@ def solvate(inFile, N_0, S, n, m):
         # String formats for the PSF and PDB file writing
         # Pdb
         dampingCoeff = 0.00
-        oxygen = "ATOM{0:>7}  OH2 TIP3 {1:4.0f}      0.000   0.000{2:>8.3f}  0.00  0.00      TUB  O\n"
-        hydro1 = "ATOM{0:>7}  H1  TIP3 {1:4.0f}      0.000   0.766{2:>8.3f}  0.00  0.00      TUB  H\n"
-        hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}      0.000  -0.766{2:>8.3f}  0.00  0.00      TUB  H\n"
+        oxygen = "ATOM{0:>7}  OH2 TIP3 {1:4.0f}       0.000   0.000{2:>8.3f}  0.00  0.00      WTR  O\n"
+        hydro1 = "ATOM{0:>7}  H1  TIP3 {1:4.0f}       0.000   0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
+        hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}       0.000  -0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
 
         # Psf
         # opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
@@ -395,7 +848,7 @@ def forceWrite(inFile, paths, files, force):
 
         return paths, files
 
-
+        
 def restraintWrite(inFile, paths, files):
     # Generate a file that restrains each carbon atom to it's initial position with force constant k
 
@@ -525,7 +978,7 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         return paths, files
 
 
-def runSim(simPath, simFile, output = "waterSim"):
+def runSim(simPath, simFile, output):
     """ given an input path to a simulation file, runSim will call namd2 to run the simulation """
     
     logFile = open(simPath + output + ".log", "w")
@@ -579,4 +1032,26 @@ def main(FNAME, N_0, S, n, m, TEMP, LENGTH, FORCESTRENGTH, minimize):
     paths, files = forceWrite(FNAME, paths, files, FORCESTRENGTH)
     paths, files = simWrite(FNAME, paths, files, TEMP, LENGTH, minimize)
     runSim(paths['tfinal'], files['sim-conf'], FNAME)
-
+    
+def run(fileName = 'Test', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
+        duration = 1000, force = 0, restraint = 0, minDuration = 1000):
+    
+    # The paths dictionary holds the path name to each tier of the data hierarchy
+    paths = {}
+    paths['home'] = os.path.abspath('..') + '/'
+    paths['type'] = paths['home'] + 'Data/' + '(' + str(n) + ', ' + str(m) + ')/'
+    paths['N0'] = paths['type'] + 'N0 = ' + str(N0) + '/'
+    paths['pbc'] = paths['N0'] + 'PBC/'
+    paths['solvate'] = paths['pbc'] + 'S = ' + str(S) + '/'
+    paths['restraint'] = paths['solvate'] + 'R = ' + str(restraint) + '/'
+    paths['forcing'] = paths['restraint'] + 'F = ' + str(force) + '/'
+    paths['temperature'] = paths['forcing'] + 'Temp = ' + str(temp) + ', d = ' + str(damping) + '/'
+    paths['tfinal'] = paths['temperature'] + 'Tf = ' + str(duration) + '/'
+        
+    cntWrite(paths, fileName, N0, n, m)
+    waterWrite(paths, fileName, N0, S)
+    pdbWrite(paths, fileName, 'restraint', restraint)
+    pdbWrite(paths, fileName, 'forcing', force)
+    pdbWrite(paths, fileName, 'temperature', damping)
+    confFile = confWrite(paths, fileName, restraint, temp, duration, minDuration)
+    runSim(paths['tfinal'], confFile, fileName)

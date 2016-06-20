@@ -135,7 +135,80 @@ proc pbcNT {molnm fileOut ntype} {
     
     set newCell [ lindex [ pbc get ] 0 ]
     
+    # Set the resid of the carbon nanotube to 1
+    $mymol set resid 1
+    
     $mymol writepdb $fname.pdb
     $mymol writepsf $fname.psf
+
+}
+
+proc NTrestraint {molnm fileOut restraint} {
+
+    # Open the files molnm.psf and molnm.pdb to load the molecule
+    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
+    
+    set carb [ atomselect top carbon ]
+    set wtr [ atomselect top water ]
+    
+    if {$restraint == 0} {
+    
+        $carb set beta 1
+        $carb set occupancy 0
+        
+    } else {
+    
+        $carb set beta 0
+        $carb set occupancy $restraint
+        
+    }
+    $wtr set beta 0
+    $wtr set occupancy 0
+    
+    set mymol [ atomselect top all ]
+
+    $mymol writepdb $fileOut.pdb
+    $mymol writepsf $fileOut.psf
+
+}
+
+proc NTforcing {molnm fileOut forcing} {
+
+    # Open the files molnm.psf and molnm.pdb to load the molecule
+    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
+    
+    set carb [ atomselect top carbon ]
+    set ox [ atomselect top oxygen ]
+    set hy [ atomselect top hydrogen ]
+    
+    $carb set occupancy 0
+    $hy set occupancy 0
+    $ox set occupancy $forcing
+    
+    set mymol [ atomselect top all ]
+
+    $mymol writepdb $fileOut.pdb
+    $mymol writepsf $fileOut.psf
+
+}
+
+proc NTtemperature {molnm fileOut damping} {
+
+    # Open the files molnm.psf and molnm.pdb to load the molecule
+    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
+    
+    set carb [ atomselect top carbon ]
+    set wtr [ atomselect top water ]
+    
+    $carb set occupancy $damping
+    $wtr set occupancy 0
+    
+    set mymol [ atomselect top all ]
+
+    $mymol writepdb $fileOut.pdb
+    $mymol writepsf $fileOut.psf
 
 }
