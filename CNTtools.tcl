@@ -11,12 +11,14 @@ proc genNT {molnm path l n m} {
     nanotube -l $l -n $n -m $m
     set mymol [atomselect top all]
     
-    # Move the nanotube so its CM is at the origin
-    set cxyz [ measure center $mymol ] ; # find the coordinates of the center of the nanotube
-    set ncxyz {} ; # make an empty list to hold the negative of the nanotube center
-    foreach i $cxyz { lappend ncxyz [ expr { -$i } ] } ; # set ncxyz to -$cxyz
-    $mymol moveby $ncxyz ; # move the nanotube so its CM is at the origin
-
+    # Set the X and Y size of the periodic box to 50 A
+    set cell [ lindex [ pbc get ] 0 ]
+    
+    lset cell 0 50
+    lset cell 1 50
+    
+    pbc set $cell
+    
     # Save the nanotube in the file molnm in the folder specified by path
     set molpath ${path}${molnm}
     $mymol writepsf $molpath.psf
@@ -133,8 +135,6 @@ proc pbcNT {molnm fileOut ntype} {
     
     pbc set $cell
     
-    set newCell [ lindex [ pbc get ] 0 ]
-    
     # Set the resid of the carbon nanotube to 1
     $mymol set resid 1
     
@@ -210,5 +210,26 @@ proc NTtemperature {molnm fileOut damping} {
 
     $mymol writepdb $fileOut.pdb
     $mymol writepsf $fileOut.psf
+
+}
+
+proc centerNT {molnm} {
+
+    # Open the files molnm.psf and molnm.pdb to load the molecule
+    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
+
+    # Fine the CM of the nanotube
+    set carb [ atomselect top carbon ]
+    set cxyz [ measure center $carb ] ; # find the coordinates of the center of the nanotube
+    set ncxyz {} ; # make an empty list to hold the negative of the nanotube center
+    foreach i $cxyz { lappend ncxyz [ expr { -$i } ] } ; # set ncxyz to -$cxyz
+    
+    # Translate everything so that the CM of the nanotube is at the origin
+    set mymol [ atomselect top all ]
+    $mymol moveby $ncxyz ; # move the atoms so the nanotube CM is at the origin
+
+    $mymol writepdb $molnm.pdb
+    $mymol writepsf $molnm.psf
 
 }

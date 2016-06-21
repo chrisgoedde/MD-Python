@@ -108,6 +108,10 @@ def cntWrite(paths, fileName, N0, n, m):
     VMDin.stdin.flush()
     VMDin.stdin.close
     VMDin.communicate()
+    
+    # Delete the now-uneeded -prebond pdb and psf files
+    os.remove(config(paths['pbc']) + fileName + "-prebond.pdb")
+    os.remove(config(paths['pbc']) + fileName + "-prebond.psf")
         
 def waterWrite(paths, fileName, N0, S):
     """ waterWrite adds N0 + S water molecules to the inside of the nanotube,
@@ -324,16 +328,11 @@ def waterWrite(paths, fileName, N0, S):
     sourceCNT = "source CNTtools.tcl\n"
     CNTtools = "package require CNTtools 1.0\n"
 
-    fixNT = "fixNT " + quoted(config(paths['pbc']) + fileName) + "\n"
-
-    removeLangevinWater = "removeLangevinWater " + quoted(config(paths['pbc']) + fileName) + "\n"
+    centerNT = "centerNT " + quoted(config(paths['solvate']) + fileName) + "\n"
 
     VMDin.stdin.write(sourceCNT)
     VMDin.stdin.write(CNTtools)
-    # VMDin.stdin.write(fixNT)
-    # VMDin.stdin.write(removeLangevinWater)
-
-    # finished creating periodic nanotubes in VMD
+    VMDin.stdin.write(centerNT)
     VMDin.stdin.flush()
     VMDin.stdin.close
     VMDin.communicate()
@@ -374,7 +373,7 @@ def pdbWrite(paths, fileName, name, value):
     VMDin.stdin.close
     VMDin.communicate()
 
-def confWrite(paths, fileName, restraint, temp, duration, minDuration):
+def confWrite(paths, fileName, restraint, temp, duration, minDuration, outputFreq):
     """ confWrite generates a .conf file to use as input to namd2. To organize simulations
     with different parameters, confWrite will create a directory for the simulation."""
 
@@ -438,10 +437,10 @@ def confWrite(paths, fileName, restraint, temp, duration, minDuration):
 
     outFile.write("\n")
 
-    outFile.write("{0:<20}".format("restartfreq") + "100" + "\n")
-    outFile.write("{0:<20}".format("dcdfreq") + "100" + "\n")
-    outFile.write("{0:<20}".format("veldcdfreq") + "100" + "\n")
-    outFile.write("{0:<20}".format("outputEnergies") + "100" + "\n")
+    outFile.write("{0:<20}".format("restartfreq") + str(outputFreq) + "\n")
+    outFile.write("{0:<20}".format("dcdfreq") + str(outputFreq) + "\n")
+    outFile.write("{0:<20}".format("veldcdfreq") + str(outputFreq) + "\n")
+    outFile.write("{0:<20}".format("outputEnergies") + str(outputFreq) + "\n")
     outFile.write("\n")
 
     outFile.write("# Set the restraints on the carbon\n\n")
@@ -481,9 +480,12 @@ def confWrite(paths, fileName, restraint, temp, duration, minDuration):
     outFile.write("{0:<20}".format("run") + str(duration) + "\n")
     
     outFile.close()
-    paramFile = paths['home'] + "Templates/par_all27_prot_lipid.prm"
-    shutil.copy(paramFile, paths['tfinal'])
-
+    
+    # Make a link to the parameter file in the simulation run folder
+    paramFile = "Parameter Files/par_all27_prot_lipid.prm"
+    os.link(paramFile, paths['tfinal'] + "par_all27_prot_lipid.prm")
+    
+    # Make links to all the other configuration files in the simulation run folder
     os.link(configFile(paths['solvate'], fileName + '.pdb'), paths['tfinal'] + fileName + '.pdb')
     os.link(configFile(paths['solvate'], fileName + '.psf'), paths['tfinal'] + fileName + '.psf')
     os.link(configFile(paths['restraint'], fileName + '.pdb'), paths['tfinal'] + fileName + '-restraint.pdb')
@@ -584,7 +586,6 @@ def tubeGen(inFile, pbcFile, N_0, n, m):
         VMDin.communicate()
         if VMDin.returncode == 0:
             return paths, files
-
 
 def solvate(inFile, N_0, S, n, m):
     """ The solvate module will create an armchair swcnt with N_0 rings and
@@ -802,7 +803,6 @@ def solvate(inFile, N_0, S, n, m):
 
         return paths, files
 
-
 def forceWrite(inFile, paths, files, force):
     # Generates the file that indicates how strong the force is on each atom by modifying the occupancy column
 
@@ -848,7 +848,6 @@ def forceWrite(inFile, paths, files, force):
 
         return paths, files
 
-        
 def restraintWrite(inFile, paths, files):
     # Generate a file that restrains each carbon atom to it's initial position with force constant k
 
@@ -907,7 +906,6 @@ def restraintWrite(inFile, paths, files):
         outkFile.close()
 
         return paths, files
-
 
 def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
     """ simWrite generates a .conf file to use as input to namd2. To organize simulations
@@ -969,14 +967,13 @@ def simWrite(inFile, paths, files, temp = 300, tf = 20000, minimize = 1000):
         outFile.writelines(simLines)
         outFile.close()
         paramFile = paths['home'] + "/Templates/par_all27_prot_lipid.prm"
-        shutil.copy(paramFile, paths['tfinal'])
+        os.link(paramFile, paths['tfinal'] + "par_all27_prot_lipid.prm")
 
         os.link(configFile(paths['solvate'], files['solvate-pdb']), paths['tfinal'] + files['solvate-pdb'])
         os.link(configFile(paths['solvate'], files['solvate-psf']), paths['tfinal'] + files['solvate-psf'])
         os.link(configFile(paths['restraint'], files['restraint-pdb']), paths['tfinal'] + files['restraint-pdb'])
         os.link(configFile(paths['forcing'], files['forcing-pdb']), paths['tfinal'] + files['forcing-pdb'])
         return paths, files
-
 
 def runSim(simPath, simFile, output):
     """ given an input path to a simulation file, runSim will call namd2 to run the simulation """
@@ -1009,7 +1006,6 @@ def runSim(simPath, simFile, output):
               + "Simulation FAIL.\n" \
               + "################################################################\n")
 
-
 # find cell basis
 def getCNTBasis(inFile):
     """ getCNTBasis finds the basis of a nanotube with filename outFile. """
@@ -1025,7 +1021,6 @@ def getCNTBasis(inFile):
     
     return xVec, yVec, zVec
 
-
 def main(FNAME, N_0, S, n, m, TEMP, LENGTH, FORCESTRENGTH, minimize):
     paths, files = solvate(FNAME, N_0, S, n, m)
     paths, files = restraintWrite(FNAME, paths, files)
@@ -1034,7 +1029,7 @@ def main(FNAME, N_0, S, n, m, TEMP, LENGTH, FORCESTRENGTH, minimize):
     runSim(paths['tfinal'], files['sim-conf'], FNAME)
     
 def run(fileName = 'Test', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
-        duration = 1000, force = 0, restraint = 0, minDuration = 1000):
+        duration = 1000, force = 0, restraint = 0, minDuration = 1000, outputFreq = 1000):
     
     # The paths dictionary holds the path name to each tier of the data hierarchy
     paths = {}
@@ -1053,5 +1048,5 @@ def run(fileName = 'Test', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1
     pdbWrite(paths, fileName, 'restraint', restraint)
     pdbWrite(paths, fileName, 'forcing', force)
     pdbWrite(paths, fileName, 'temperature', damping)
-    confFile = confWrite(paths, fileName, restraint, temp, duration, minDuration)
+    confFile = confWrite(paths, fileName, restraint, temp, duration, minDuration, outputFreq)
     runSim(paths['tfinal'], confFile, fileName)
