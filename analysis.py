@@ -3,8 +3,8 @@ import numpy as np
 
 def getCoordTimeSeries(paths, runFile, start, finish, atomName):
 
-    pdbFile = paths['tfinal'] + runFile + '.pdb'
-    dcdFile = paths['tfinal'] + runFile + '.dcd'
+    pdbFile = paths['data'] + runFile + '.pdb'
+    dcdFile = paths['data'] + runFile + '.dcd'
 
     # Now, open up the DCD file and get the ensembles for the carbons and oxygens
 
@@ -53,8 +53,8 @@ def getVelTimeSeries(paths, runFile, start, finish, atomName):
 
     velFactor = 20.45482706
     
-    pdbFile = paths['tfinal'] + runFile + '.pdb'
-    dcdFile = paths['tfinal'] + runFile + '.veldcd'
+    pdbFile = paths['data'] + runFile + '.pdb'
+    dcdFile = paths['data'] + runFile + '.veldcd'
 
     # Open up the DCD file and get the ensembles for the carbons and oxygens
 
@@ -73,9 +73,11 @@ def getVelTimeSeries(paths, runFile, start, finish, atomName):
         
     lastTime = finish
     
-    atomX = velFactor * atomC[firstTime:lastTime, :, 0]
-    atomY = velFactor * atomC[firstTime:lastTime, :, 1]
-    atomZ = velFactor * atomC[firstTime:lastTime, :, 2]
+    # Convert velocities to m/s
+    
+    atomX = 100 * velFactor * atomC[firstTime:lastTime, :, 0]
+    atomY = 100 * velFactor * atomC[firstTime:lastTime, :, 1]
+    atomZ = 100 * velFactor * atomC[firstTime:lastTime, :, 2]
         
     return atomX, atomY, atomZ
 

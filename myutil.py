@@ -1,3 +1,5 @@
+# _*_ coding: utf-8
+
 import os
 
 # Simple function to create a quoted string to protect file/path names with spaces
@@ -16,13 +18,13 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
     
-def makePaths(fileName = 'Run-1', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
+def makePaths(fileName = 'Run-1', type = 'Data', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
         force = 0, restraint = 0, duration = 10000, minDuration = 10000, \
         dt = 1, outputFreq = 1000, PME = 'off'):
 
     paths = {}
     paths['home'] = os.path.abspath('..') + '/'
-    paths['type'] = paths['home'] + 'Data/' + '(' + str(n) + ', ' + str(m) + ')/'
+    paths['type'] = paths['home'] + type + '/' + '(' + str(n) + ', ' + str(m) + ')/'
     paths['N0'] = paths['type'] + 'N0 = ' + str(N0) + '/'
     paths['pbc'] = paths['N0'] + 'PBC/'
     paths['solvate'] = paths['pbc'] + 'PME ' + PME + '/' + 'S = ' + str(S) + '/'
@@ -36,4 +38,14 @@ def makePaths(fileName = 'Run-1', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damp
     paths['data'] = paths['tfinal'] + fileName + '/'
 
     return paths
+    
+def num2Str(theNum):
+
+    if theNum >= 0:
+    
+        return str(theNum)
+        
+    else:
+    
+        return u'−' + str(-theNum)
 

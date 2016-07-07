@@ -557,11 +557,11 @@ def getCNTBasis(inFile):
     return xVec, yVec, zVec
 
 def run(fileName = 'Run-1', N0 = 20, S = 0, n = 4, m = 4, temp = 300, damping = 1, \
-        force = 0, restraint = 0, duration = 100000, minDuration = 100000, dt = 1, \
+        force = 0, restraint = 0, duration = 100000, minDuration = 10000, dt = 1, \
         outputFreq = 1000, PME = 'off'):
     
     # The paths dictionary holds the path name to each tier of the data hierarchy
-    paths = my.makePaths(fileName, N0, S, n, m, temp, damping, force, restraint, duration, \
+    paths = my.makePaths(fileName, 'Data', N0, S, n, m, temp, damping, force, restraint, duration, \
         minDuration, dt, outputFreq, PME)
     
     hostname = socket.gethostname().partition('.')[0]
