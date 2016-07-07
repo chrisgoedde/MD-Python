@@ -16,7 +16,7 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
     
-def makePaths(N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
+def makePaths(fileName = 'Run-1', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
         force = 0, restraint = 0, duration = 10000, minDuration = 10000, \
         dt = 1, outputFreq = 1000, PME = 'off'):
 
@@ -33,6 +33,7 @@ def makePaths(N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
     paths['tfinal'] = paths['temperature'] + 'Run = ' + str(duration) \
         + ', Min = ' + str(minDuration) + ', dt = ' + str(dt) \
         + ', Out = ' + str(outputFreq) + '/'
+    paths['data'] = paths['tfinal'] + fileName + '/'
 
     return paths
 

@@ -368,7 +368,7 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
     """ confWrite generates a .conf file to use as input to namd2. To organize simulations
     with different parameters, confWrite will create a directory for the simulation."""
 
-    confFile = paths['tfinal'] + fileName + '.conf'
+    confFile = paths['run'] + fileName + '.conf'
     wisdomFile = "FFTW_NAMD_2.11_" + hostname + ".txt"
     paramFile = "par_all27_prot_lipid.prm"
 
@@ -376,13 +376,21 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
           + "Writing NAMD configuration file " + confFile + ".\n" \
           + "################################################################\n")
       
-    if not os.path.exists(paths['tfinal']):
-        os.makedirs(paths['tfinal'])
+    if not os.path.exists(paths['run']):
+        os.makedirs(paths['run'])
 
     # Grabs the CNT basis vectors
     x, y, z = getCNTBasis(my.config(paths['pbc']) + fileName + '.pdb')
 
     outFile = open(confFile, "w")
+    
+    outFile.write("# Configuration file written on host " + hostname + "\n" \
+        + "# on " + str(datetime.datetime.now().date()) \
+        + " at " + str(datetime.datetime.now().time()).partition('.')[0] + ".\n\n")
+        
+    outFile.write("# Limit the length of the log file\n\n")
+    
+    outFile.write("{0:<20}".format("outputEnergies") + str(100*outputFreq) + "\n\n")
     
     outFile.write("# Set up periodic boundary conditions\n\n")
     
@@ -431,7 +439,6 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
     outFile.write("{0:<20}".format("restartfreq") + str(outputFreq) + "\n")
     outFile.write("{0:<20}".format("dcdfreq") + str(outputFreq) + "\n")
     outFile.write("{0:<20}".format("veldcdfreq") + str(outputFreq) + "\n")
-    outFile.write("{0:<20}".format("outputEnergies") + str(outputFreq) + "\n")
     outFile.write("\n")
 
     outFile.write("# Set the restraints on the carbon\n\n")
@@ -476,25 +483,25 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
     outFile.close()
     
     # Make a link to the parameter file in the simulation run folder
-    if not os.path.exists(paths['tfinal'] + paramFile):
-        os.link("Parameter Files/" + paramFile, paths['tfinal'] + paramFile)
+    if not os.path.exists(paths['run'] + paramFile):
+        os.link("Parameter Files/" + paramFile, paths['run'] + paramFile)
         
     # Make a link to the wisdom file in the simulation run folder
-    if (not os.path.exists(paths['tfinal'] + wisdomFile)) \
+    if (not os.path.exists(paths['run'] + wisdomFile)) \
         and os.path.exists("Parameter Files/" + wisdomFile):
-        os.link("Parameter Files/" + wisdomFile, paths['tfinal'] + wisdomFile)
+        os.link("Parameter Files/" + wisdomFile, paths['run'] + wisdomFile)
     
     # Make links to all the other configuration files in the simulation run folder
-    if not os.path.exists(paths['tfinal'] + fileName + '.pdb'):
-        os.link(my.configFile(paths['solvate'], fileName + '.pdb'), paths['tfinal'] + fileName + '.pdb')
-    if not os.path.exists(paths['tfinal'] + fileName + '.psf'):
-        os.link(my.configFile(paths['solvate'], fileName + '.psf'), paths['tfinal'] + fileName + '.psf')
-    if not os.path.exists(paths['tfinal'] + fileName + '-restraint.pdb'):
-        os.link(my.configFile(paths['restraint'], fileName + '.pdb'), paths['tfinal'] + fileName + '-restraint.pdb')
-    if not os.path.exists(paths['tfinal'] + fileName + '-forcing.pdb'):
-        os.link(my.configFile(paths['forcing'], fileName + '.pdb'), paths['tfinal'] + fileName + '-forcing.pdb')
-    if not os.path.exists(paths['tfinal'] + fileName + '-langevin.pdb'):
-        os.link(my.configFile(paths['temperature'], fileName + '.pdb'), paths['tfinal'] + fileName + '-langevin.pdb')
+    if not os.path.exists(paths['run'] + fileName + '.pdb'):
+        os.link(my.configFile(paths['solvate'], fileName + '.pdb'), paths['run'] + fileName + '.pdb')
+    if not os.path.exists(paths['run'] + fileName + '.psf'):
+        os.link(my.configFile(paths['solvate'], fileName + '.psf'), paths['run'] + fileName + '.psf')
+    if not os.path.exists(paths['run'] + fileName + '-restraint.pdb'):
+        os.link(my.configFile(paths['restraint'], fileName + '.pdb'), paths['run'] + fileName + '-restraint.pdb')
+    if not os.path.exists(paths['run'] + fileName + '-forcing.pdb'):
+        os.link(my.configFile(paths['forcing'], fileName + '.pdb'), paths['run'] + fileName + '-forcing.pdb')
+    if not os.path.exists(paths['run'] + fileName + '-langevin.pdb'):
+        os.link(my.configFile(paths['temperature'], fileName + '.pdb'), paths['run'] + fileName + '-langevin.pdb')
     
     return confFile
     
@@ -530,6 +537,7 @@ def runSim(simPath, simFile, output):
         print("################################################################\n" \
               + "Simulation FAIL.\n" \
               + "################################################################\n")
+        runTime = 0
               
     return Namd2in.returncode, runTime
 
@@ -553,10 +561,12 @@ def run(fileName = 'Run-1', N0 = 20, S = 0, n = 4, m = 4, temp = 300, damping = 
         outputFreq = 1000, PME = 'off'):
     
     # The paths dictionary holds the path name to each tier of the data hierarchy
-    paths = my.makePaths(N0, S, n, m, temp, damping, force, restraint, duration, \
+    paths = my.makePaths(fileName, N0, S, n, m, temp, damping, force, restraint, duration, \
         minDuration, dt, outputFreq, PME)
     
     hostname = socket.gethostname().partition('.')[0]
+    
+    paths['run'] = os.getenv('HOME') + '/' + fileName + '/'
         
     cntWrite(paths, fileName, N0, n, m)
     waterWrite(paths, fileName, N0, S)
@@ -565,7 +575,7 @@ def run(fileName = 'Run-1', N0 = 20, S = 0, n = 4, m = 4, temp = 300, damping = 
     pdbWrite(paths, fileName, 'temperature', damping)
     confFile = confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt, \
         outputFreq, PME, hostname)
-    result, runTime = runSim(paths['tfinal'], confFile, fileName)
+    result, runTime = runSim(paths['run'], confFile, fileName)
     
     if result == 0:
     
@@ -592,3 +602,9 @@ def run(fileName = 'Run-1', N0 = 20, S = 0, n = 4, m = 4, temp = 300, damping = 
             + str(minDuration) + ',' \
             + str(dt) + ',' \
             + str(outputFreq) + '\n')
+            
+    if os.path.exists(paths['data']):
+        shutil.rmtree(paths['data'])
+        
+    shutil.move(paths['run'], paths['data'])
+    
