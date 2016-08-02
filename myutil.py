@@ -18,24 +18,32 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
     
-def makePaths(fileName = 'Run-1', type = 'Data', N0 = 20, S = 0, n = 5, m = 5, temp = 300, damping = 1, \
-        force = 0, restraint = 0, duration = 10000, minDuration = 10000, \
-        dt = 1, outputFreq = 1000, PME = 'off'):
+def makePaths(paramDict):
 
     paths = {}
     paths['home'] = os.path.abspath('..') + '/'
-    paths['type'] = paths['home'] + type + '/' + '(' + str(n) + ', ' + str(m) + ')/'
-    paths['N0'] = paths['type'] + 'N0 = ' + str(N0) + '/'
+    paths['type'] = paths['home'] + paramDict['Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
+    paths['N0'] = paths['type'] + 'N0 = ' + str(paramDict['N0']) + '/'
     paths['pbc'] = paths['N0'] + 'PBC/'
-    paths['solvate'] = paths['pbc'] + 'PME ' + PME + '/' + 'S = ' + str(S) + '/'
-    paths['restraint'] = paths['solvate'] + 'R = ' + str(restraint) + '/'
-    paths['forcing'] = paths['restraint'] + 'F = ' + str(force) + '/'
-    paths['temperature'] = paths['forcing'] + 'Temp = ' + str(temp) \
-        + ', Damping = ' + str(damping) + '/'
-    paths['tfinal'] = paths['temperature'] + 'Run = ' + str(duration) \
-        + ', Min = ' + str(minDuration) + ', dt = ' + str(dt) \
-        + ', Out = ' + str(outputFreq) + '/'
-    paths['data'] = paths['tfinal'] + fileName + '/'
+    paths['solvate'] = paths['pbc'] + 'PME ' + paramDict['PME'] + '/' + 'S = ' + str(paramDict['S']) + '/'
+    paths['restraint'] = paths['solvate'] + 'R = ' + str(paramDict['Restraint']) + '/'
+    paths['forcing'] = paths['restraint'] + 'F = ' + str(paramDict['Force (pN)']) + ' pN' + '/'
+    if paramDict['Thermostat'] == 'On':
+        paths['temperature'] = paths['forcing'] + 'Temp = ' + str(paramDict['Temperature (K)']) \
+            + ' K, Damping = ' + str(paramDict['Damping']) + '/'
+    else:
+        paths['temperature'] = paths['forcing'] + 'Temp = ' + str(paramDict['Temperature (K)']) \
+            + ' K, Thermostat = ' + paramDict['Thermostat'] + '/'    
+    paths['tfinal'] = paths['temperature'] + 'Run = ' + str(paramDict['Duration']) \
+        + ', Min = ' + str(paramDict['Min Duration']) + ', dt = ' + str(paramDict['dt (fs)']) \
+        + ', Out = ' + str(paramDict['outputFreq']) + '/'
+    if paramDict['Run Type'] == 'New':
+        paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/'
+    else:
+        paths['parent data'] = paths['tfinal'] + paramDict['File Name'] + '/'
+        paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/' + 'Extend-1' + '/'
+
+    paths['pictures'] = paths['data'] + 'Pictures' + '/'
 
     return paths
     
@@ -48,4 +56,66 @@ def num2Str(theNum):
     else:
     
         return u'−' + str(-theNum)
+        
+def setParamDefaults():
 
+    paramDict = {}
+    paramDict['File Name'] = 'Run-1'
+    paramDict['Folder'] = 'Data'
+    paramDict['Run Type'] = 'New'
+    paramDict['N0'] = 200
+    paramDict['S'] = -1
+    paramDict['n'] = 4
+    paramDict['m'] = 4
+    paramDict['Temperature (K)'] = 5
+    paramDict['Damping'] = 1
+    paramDict['Thermostat'] = 'On'
+    paramDict['Force (pN)'] = 0.2
+    paramDict['PME'] = 'on'
+    paramDict['Restraint'] = 600
+    paramDict['Duration'] = 1000000
+    paramDict['Min Duration'] = 10000
+    paramDict['dt (fs)'] = 1
+    paramDict['outputFreq'] = 1000
+
+    return paramDict
+    
+import csv
+import pprint 
+
+def readCSV(cvsName, inputParams):
+
+    inputItems = inputParams.items()
+    
+    pp = pprint.PrettyPrinter(indent=2)
+    runList = [];
+    with open(cvsName, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+                
+            convert(row, 'Damping')
+            convert(row, 'Duration')
+            convert(row, 'Min Duration')
+            convert(row, 'Force (pN)')
+            convert(row, 'N0')
+            convert(row, 'S')
+            convert(row, 'm')
+            convert(row, 'n')
+            convert(row, 'outputFreq')
+            convert(row, 'dt (fs)')
+            convert(row, 'Temperature (K)')
+            convert(row, 'Restraint')
+            convert(row, 'Run Time (h)')
+
+            allItems = row.items()
+            if all(m in allItems for m in inputItems):
+                runList.append(row)
+
+    return runList
+
+def convert(theDict, theKey):
+
+    if '.' in theDict[theKey]:
+        theDict[theKey] = float(theDict[theKey])
+    else:
+        theDict[theKey] = int(theDict[theKey])

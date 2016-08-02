@@ -100,7 +100,38 @@ def cntWrite(paths, fileName, N0, n, m):
     # Delete the now-uneeded -prebond pdb and psf files
     os.remove(my.config(paths['pbc']) + fileName + "-prebond.pdb")
     os.remove(my.config(paths['pbc']) + fileName + "-prebond.psf")
+    
+    # Read back in the pdb file and make sure the z-coordinate spacing is regular
+    
+    alignCNT(my.config(paths['pbc']) + fileName + ".pdb")
+    
+def alignCNT(pdbFileName, z0 = 0.614):
+
+    with open(pdbFileName) as pdbFile:
+        pdbLines = pdbFile.readlines()
+
+    lenPDB = len(pdbLines)
+    
+    for i in range(0, lenPDB):
         
+        if "CRYST" in pdbLines[i]:
+        
+            L = float(pdbLines[i][24:33])
+            L = z0 * np.round(L/z0)
+            pdbLines[i] = pdbLines[i][:24] + "{:9.3f}".format(L) + pdbLines[i][33:]
+            
+        elif "ATOM" in pdbLines[i]:
+
+            z = float(pdbLines[i][46:54])
+            z = z0 * np.round(z/z0)
+            pdbLines[i] = pdbLines[i][:46] + "{:8.3f}".format(z) + pdbLines[i][54:]
+            
+    pdbFile.close()
+    
+    pdbOut = open(pdbFileName, 'w')
+    pdbOut.writelines(pdbLines)
+    pdbOut.close()
+    
 def waterWrite(paths, fileName, N0, S):
     """ waterWrite adds N0 + S water molecules to the inside of the nanotube,
         then write out new psf and pdb files for the nanotube. """
@@ -182,7 +213,7 @@ def waterWrite(paths, fileName, N0, S):
 
     # Iterates through all of the lines of the input Psf file, and records the
     # index of the lines that contain the string !NATOM, !NBOND, and !NTHETA,
-    # as wella as changes the line to update the new number of each
+    # as well as changes the line to update the new number of each
     for i in range(0, lenPsf):
         if "!NATOM" in psfLines[i]:
             psfLines[i] = "     {:3d} !NATOM\n".format( newAtoms )
@@ -363,8 +394,8 @@ def pdbWrite(paths, fileName, name, value):
     VMDin.stdin.close
     VMDin.communicate()
 
-def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt, \
-        outputFreq, PME, hostname):
+def confWrite(paths, fileName, force, restraint, temp, thermostat, duration, minDuration, dt, \
+        outputFreq, PME, hostname, extend):
     """ confWrite generates a .conf file to use as input to namd2. To organize simulations
     with different parameters, confWrite will create a directory for the simulation."""
 
@@ -380,7 +411,7 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
         os.makedirs(paths['run'])
 
     # Grabs the CNT basis vectors
-    x, y, z = getCNTBasis(my.config(paths['pbc']) + fileName + '.pdb')
+    x, y, z = getCNTBasis(my.config(paths['pbc']) + fileName + ".pdb")
 
     outFile = open(confFile, "w")
     
@@ -405,8 +436,8 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
 
     outFile.write("# Set the input and output files\n\n")
     
-    outFile.write("{0:<20}".format("structure") + fileName + '.psf' + "\n")
-    outFile.write("{0:<20}".format("coordinates") + fileName + '.pdb' + "\n")
+    outFile.write("{0:<20}".format("structure") + fileName + ".psf" + "\n")
+    outFile.write("{0:<20}".format("coordinates") + fileName + ".pdb" + "\n")
     outFile.write("{0:<20}".format("outputname") + fileName + "\n")
     outFile.write("\n")
     
@@ -436,21 +467,29 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
 
     outFile.write("\n")
 
-    outFile.write("{0:<20}".format("restartfreq") + str(outputFreq) + "\n")
-    outFile.write("{0:<20}".format("dcdfreq") + str(outputFreq) + "\n")
-    outFile.write("{0:<20}".format("veldcdfreq") + str(outputFreq) + "\n")
+    if not extend:
+        outFile.write("{0:<20}".format("restartfreq") + str(outputFreq) + "\n")
+        outFile.write("{0:<20}".format("dcdfreq") + str(outputFreq) + "\n")
+        outFile.write("{0:<20}".format("veldcdfreq") + str(outputFreq) + "\n")
+        outFile.write("{0:<20}".format("forcedcdfreq") + str(outputFreq) + "\n")
+    else:
+        outFile.write("{0:<20}".format("restartfreq") + str(100) + "\n")
+        outFile.write("{0:<20}".format("dcdfreq") + str(100) + "\n")
+        outFile.write("{0:<20}".format("veldcdfreq") + str(100) + "\n")
+        outFile.write("{0:<20}".format("forcedcdfreq") + str(100) + "\n")
+    
     outFile.write("\n")
 
     outFile.write("# Set the restraints on the carbon\n\n")
     
     if restraint == 0:
         outFile.write("{0:<20}".format("fixedAtoms") + "on" + "\n")
-        outFile.write("{0:<20}".format("fixedAtomsFile") + fileName + '-restraint.pdb' + "\n")
+        outFile.write("{0:<20}".format("fixedAtomsFile") + fileName + "-restraint.pdb" + "\n")
         outFile.write("{0:<20}".format("fixedAtomsCol") + "B" + "\n")
     else:
         outFile.write("{0:<20}".format("constraints") + "on" + "\n")
-        outFile.write("{0:<20}".format("consref") + fileName + '-restraint.pdb' + "\n")
-        outFile.write("{0:<20}".format("conskfile") + fileName + '-restraint.pdb' + "\n")
+        outFile.write("{0:<20}".format("consref") + fileName + "-restraint.pdb" + "\n")
+        outFile.write("{0:<20}".format("conskfile") + fileName + "-restraint.pdb" + "\n")
         outFile.write("{0:<20}".format("conskcol") + "O" + "\n")
 
     outFile.write("\n")
@@ -461,25 +500,34 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
         outFile.write("{0:<20}".format("constantForce") + "yes" + "\n")
     else:
         outFile.write("{0:<20}".format("constantForce") + "no" + "\n")
-    outFile.write("{0:<20}".format("consForceFile") + fileName + '-forcing.pdb' + "\n")
+    outFile.write("{0:<20}".format("consForceFile") + fileName + "-forcing.pdb" + "\n")
     outFile.write("{0:<20}".format("consForceScaling") + "0.014392621" + "\n")
     outFile.write("\n")
 
     outFile.write("# Set the Langevin thermostat\n\n")
     
-    outFile.write("{0:<20}".format("langevin") + "on" + "\n")
-    outFile.write("{0:<20}".format("langevinFile") + fileName + '-langevin.pdb' + "\n")
-    outFile.write("{0:<20}".format("langevinCol") + "O" + "\n")
-    outFile.write("{0:<20}".format("langevinTemp") + str(temp) + "\n")
+    if restraint == 0 or (not thermostat):
+        outFile.write("{0:<20}".format("langevin") + "off" + "\n")
+    else:
+        outFile.write("{0:<20}".format("langevin") + "on" + "\n")
+        outFile.write("{0:<20}".format("langevinFile") + fileName + "-langevin.pdb" + "\n")
+        outFile.write("{0:<20}".format("langevinCol") + "O" + "\n")
+        outFile.write("{0:<20}".format("langevinTemp") + str(temp) + "\n")
+        
     outFile.write("\n")
 
     outFile.write("# Set the execution parameters\n\n")
 
-    outFile.write("{0:<20}".format("temperature") + str(temp) + "\n")
-    outFile.write("{0:<20}".format("minimize") + str(minDuration) + "\n")
-    outFile.write("{0:<20}".format("reinitvels") + str(temp) + "\n")
-    outFile.write("{0:<20}".format("run") + str(duration) + "\n")
-    
+    if not extend:
+        outFile.write("{0:<20}".format("temperature") + str(temp) + "\n")
+        outFile.write("{0:<20}".format("minimize") + str(minDuration) + "\n")
+        outFile.write("{0:<20}".format("reinitvels") + str(temp) + "\n")
+        outFile.write("{0:<20}".format("run") + str(duration) + "\n")
+    else:
+        outFile.write("{0:<20}".format("bincoordinates") + fileName + ".restart.coor" + "\n")
+        outFile.write("{0:<20}".format("binvelocities") + fileName + ".restart.vel" + "\n")
+        outFile.write("{0:<20}".format("run") + str(100000) + "\n")
+
     outFile.close()
     
     # Make a link to the parameter file in the simulation run folder
@@ -500,12 +548,18 @@ def confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt
         os.link(my.configFile(paths['restraint'], fileName + '.pdb'), paths['run'] + fileName + '-restraint.pdb')
     if not os.path.exists(paths['run'] + fileName + '-forcing.pdb'):
         os.link(my.configFile(paths['forcing'], fileName + '.pdb'), paths['run'] + fileName + '-forcing.pdb')
-    if not os.path.exists(paths['run'] + fileName + '-langevin.pdb'):
+    if not os.path.exists(paths['run'] + fileName + '-langevin.pdb') and restraint != 0:
         os.link(my.configFile(paths['temperature'], fileName + '.pdb'), paths['run'] + fileName + '-langevin.pdb')
     
+    if extend:
+        if not os.path.exists(paths['run'] + fileName + ".restart.coor"):
+            os.link(paths['parent data'] + fileName + ".restart.coor", paths['run'] + fileName + ".restart.coor")
+        if not os.path.exists(paths['run'] + fileName + ".restart.vel"):
+            os.link(paths['parent data'] + fileName + ".restart.vel", paths['run'] + fileName + ".restart.vel")
+
     return confFile
     
-def runSim(simPath, simFile, output):
+def runSim(simPath, simFile, output, hostname):
     """ given an input path to a simulation file, runSim will call namd2 to run the simulation """
     
     logFile = open(simPath + output + ".log", "w")
@@ -516,8 +570,14 @@ def runSim(simPath, simFile, output):
           + "################################################################\n")
     
     startTime = time.time()
+    
+    numThreads = {}
+    numThreads['cascade'] = '+p4'
+    numThreads['Home-iMac'] = '+p4'
+    numThreads['nanotube'] = '+p2'
+    numThreads['CGG-MacBook-Air'] = '+p2'
 
-    Namd2in=subprocess.Popen(["namd2", simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
+    Namd2in=subprocess.Popen(['namd2', numThreads[hostname], simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
     Namd2in.stdin.flush()
     Namd2in.stdin.close
     Namd2in.communicate()
@@ -556,55 +616,83 @@ def getCNTBasis(inFile):
     
     return xVec, yVec, zVec
 
-def run(fileName = 'Run-1', N0 = 20, S = 0, n = 4, m = 4, temp = 300, damping = 1, \
-        force = 0, restraint = 0, duration = 100000, minDuration = 10000, dt = 1, \
-        outputFreq = 1000, PME = 'off'):
+def run(paramDict):
     
     # The paths dictionary holds the path name to each tier of the data hierarchy
-    paths = my.makePaths(fileName, 'Data', N0, S, n, m, temp, damping, force, restraint, duration, \
-        minDuration, dt, outputFreq, PME)
+    paths = my.makePaths(paramDict)
     
+    if os.path.exists(paths['data']) and paramDict['Run Type'] == 'New':
+        print("################################################################\n" \
+              + "Simulation data folder already exists ... aborting.\n" \
+              + "################################################################\n")
+        return
+    elif paramDict['Run Type'] == 'Extend' and (not os.path.exists(paths['parent data'])):
+        print("################################################################\n" \
+              + "No simulation data folder to extend run from ... aborting.\n" \
+              + "################################################################\n")
+        return
+            
     hostname = socket.gethostname().partition('.')[0]
     
-    paths['run'] = os.getenv('HOME') + '/' + fileName + '/'
+    if paramDict['Run Type'] == 'New':
+        paths['run'] = os.getenv('HOME') + '/' + paramDict['File Name'] + '/'
+    else:
+        paths['run'] = os.getenv('HOME') + '/' + 'Extend-1' + '/'
+    
+    if paramDict['Run Type'] == 'New':
+    
+        cntWrite(paths, paramDict['File Name'], paramDict['N0'], paramDict['n'], paramDict['m'])
+        waterWrite(paths, paramDict['File Name'], paramDict['N0'], paramDict['S'])
+        pdbWrite(paths, paramDict['File Name'], 'restraint', paramDict['Restraint'])
+        pdbWrite(paths, paramDict['File Name'], 'forcing', paramDict['Force (pN)'])
+        pdbWrite(paths, paramDict['File Name'], 'temperature', paramDict['Damping'])
         
-    cntWrite(paths, fileName, N0, n, m)
-    waterWrite(paths, fileName, N0, S)
-    pdbWrite(paths, fileName, 'restraint', restraint)
-    pdbWrite(paths, fileName, 'forcing', force)
-    pdbWrite(paths, fileName, 'temperature', damping)
-    confFile = confWrite(paths, fileName, force, restraint, temp, duration, minDuration, dt, \
-        outputFreq, PME, hostname)
-    result, runTime = runSim(paths['run'], confFile, fileName)
+        if paramDict['Thermostat'] == 'On':
+            therm = True
+        else:
+            therm = False
+        confFile = confWrite(paths, paramDict['File Name'], paramDict['Force (pN)'], \
+            paramDict['Restraint'], paramDict['Temperature (K)'], therm, paramDict['Duration'], \
+            paramDict['Min Duration'], paramDict['dt (fs)'], \
+            paramDict['outputFreq'], paramDict['PME'], hostname, False)
+            
+    else:
+    
+        confFile = confWrite(paths, paramDict['File Name'], paramDict['Force (pN)'], \
+            paramDict['Restraint'], paramDict['Temperature (K)'], paramDict['Duration'], \
+            paramDict['Min Duration'], paramDict['dt (fs)'], \
+            paramDict['outputFreq'], paramDict['PME'], hostname, True)
+    
+    result, runTime = runSim(paths['run'], confFile, paramDict['File Name'], hostname)
     
     if result == 0:
     
         if not os.path.isfile(hostname + '.csv'):
         
             outFile = open(hostname + '.csv', "w")
-            outFile.write("Date,Run Time (h),File Name,N0,S,n,m,Temperature (K),Damping," \
+            outFile.write("Date,Run Time (h),File Name,Folder,Run Type,N0,S,n,m," \
+                + "Temperature (K),Damping,Thermostat," \
                 + "Force,PME,Restraint,Duration,Min Duration,dt (fs),outputFreq\n")
                 
         outFile = open(hostname + '.csv', "a")
         outFile.write(str(datetime.date.today()) + ',' \
             + "{:.1f}".format(runTime) + ',' \
-            + fileName + ',' \
-            + str(N0) + ',' \
-            + str(S) + ',' \
-            + str(n) + ',' \
-            + str(m) + ',' \
-            + str(temp) + ',' \
-            + str(damping) + ',' \
-            + str(force) + ',' \
-            + PME + ','
-            + str(restraint) + ',' \
-            + str(duration) + ',' \
-            + str(minDuration) + ',' \
-            + str(dt) + ',' \
-            + str(outputFreq) + '\n')
-            
-    if os.path.exists(paths['data']):
-        shutil.rmtree(paths['data'])
+            + paramDict['File Name'] + ',' \
+            + paramDict['Folder'] + ',' \
+            + paramDict['Run Type'] + ',' \
+            + str(paramDict['N0']) + ',' \
+            + str(paramDict['S']) + ',' \
+            + str(paramDict['n']) + ',' \
+            + str(paramDict['m']) + ',' \
+            + str(paramDict['Temperature (K)']) + ',' \
+            + str(paramDict['Damping']) + ',' \
+            + paramDict['Thermostat'] + ',' \
+            + str(paramDict['Force (pN)']) + ',' \
+            + paramDict['PME'] + ','
+            + str(paramDict['Restraint']) + ',' \
+            + str(paramDict['Duration']) + ',' \
+            + str(paramDict['Min Duration']) + ',' \
+            + str(paramDict['dt (fs)']) + ',' \
+            + str(paramDict['outputFreq']) + '\n')
         
     shutil.move(paths['run'], paths['data'])
-    

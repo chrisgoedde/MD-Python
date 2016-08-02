@@ -26,43 +26,6 @@ proc genNT {molnm path l n m} {
 
 }
 
-proc fixNT {molnm} {
-    # Open the files molnm.psf and molnm.pdb to load the molecule
-    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
-    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
-
-    set all0 [atomselect top all]
-
-    # Let nanotube be flexible by default; this will be changed later if necessary
-    $all0 set beta 0
-    
-    # Set the resid of the nanotube to 1
-    $all0 set resid 1
-
-    # Write out the molecule back to file molnm
-    set all [atomselect top all]
-    $all writepsf $molnm.psf
-    $all writepdb $molnm.pdb
-
-}
-
-proc removeLangevinWater {molnm} {
-    #removes langevin thermostat for water molecules
-    
-    # Open the files molnm.psf and molnm.pdb to load the molecule
-    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
-    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
-
-    # Set the occupancy column to zero
-    set all0 [atomselect top all]
-    $all0 set occupancy 0.00
-
-    # Write the file back out to molnm
-    set all [atomselect top all]
-    $all writepsf $molnm.psf
-    $all writepdb $molnm.pdb
-}
-
 proc pbcNT {molnm fileOut ntype} {
     # Based on procedure from Tom Sisan from Northwestern University
     # Modified by CGG Spring/Summer 2016
@@ -185,7 +148,16 @@ proc NTforcing {molnm fileOut forcing} {
     
     $carb set occupancy 0
     $hy set occupancy 0
-    $ox set occupancy $forcing
+    $ox set occupancy 1
+    $ox set x 0
+    $ox set y 0
+    $ox set z $forcing
+    $hy set x 0
+    $hy set y 0
+    $hy set z 0
+    $carb set x 0
+    $carb set y 0
+    $carb set z 0
     
     set mymol [ atomselect top all ]
 
