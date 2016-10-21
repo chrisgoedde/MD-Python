@@ -1,6 +1,8 @@
 from prody import *
 import numpy as np
 import myutil as my
+import cPickle as pickle
+import os.path
 
 def getCoordTimeSeries(paths, runFile, start, finish, atomName):
 
@@ -13,33 +15,42 @@ def getCoordTimeSeries(paths, runFile, start, finish, atomName):
     ensemble = parseDCD(dcdFile)
 
     atom = structure.select(atomName)
-
-    ensemble.setAtoms(atom)
-    atomC = ensemble.getCoordsets()
     
-    if start == 0:
-        firstTime = 0
-    else:
-        firstTime = start - 1
+    if atom is None:
+    
+        return np.array([])
         
-    lastTime = finish
+    else:
     
-    atomX = atomC[firstTime:lastTime, :, 0]
-    atomY = atomC[firstTime:lastTime, :, 1]
-    atomZ = atomC[firstTime:lastTime, :, 2]
+        ensemble.setAtoms(atom)
+        atomC = ensemble.getCoordsets()
     
-    if start == 0:
+        if start == 0:
+            firstTime = 0
+        else:
+            firstTime = start - 1
+        
+        lastTime = finish
     
-        atomC0 = getCoords(paths, runFile, atomName)
-        atomX0 = atomC0[:, 0]
-        atomY0 = atomC0[:, 1]
-        atomZ0 = atomC0[:, 2]
+        atomX = atomC[firstTime:lastTime, :, 0]
+        atomY = atomC[firstTime:lastTime, :, 1]
+        atomZ = atomC[firstTime:lastTime, :, 2]
+    
+        if start == 0:
+    
+            atomC0 = getCoords(paths, runFile, atomName)
+        
+            if len(atomC0) != 0:
+        
+                atomX0 = atomC0[:, 0]
+                atomY0 = atomC0[:, 1]
+                atomZ0 = atomC0[:, 2]
 
-        atomX = np.concatenate((np.array([atomX0]), atomX))
-        atomY = np.concatenate((np.array([atomY0]), atomY))
-        atomZ = np.concatenate((np.array([atomZ0]), atomZ))
+                atomX = np.concatenate((np.array([atomX0]), atomX))
+                atomY = np.concatenate((np.array([atomY0]), atomY))
+                atomZ = np.concatenate((np.array([atomZ0]), atomZ))
     
-    return np.array([ atomX, atomY, atomZ ])
+        return np.array([ atomX, atomY, atomZ ])
 
 def getCoords(paths, runFile, atomName):
 
@@ -48,7 +59,10 @@ def getCoords(paths, runFile, atomName):
     structure = parsePDB(pdbFile)
     
     o = structure.select(atomName)
-    coords = o.getCoords()
+    if o is None:
+        coords = np.array([])
+    else:
+        coords = o.getCoords()
     
     return coords
     
@@ -66,27 +80,45 @@ def getVelTimeSeries(paths, runFile, start, finish, atomName):
 
     atom = structure.select(atomName)
 
-    ensemble.setAtoms(atom)
-    atomC = ensemble.getCoordsets()
+    if atom is None:
     
-    if start == 0:
-        firstTime = 0
+        return np.array([])
+        
     else:
-        firstTime = start - 1
+    
+        ensemble.setAtoms(atom)
+        atomC = ensemble.getCoordsets()
+    
+        if start == 0:
+            firstTime = 0
+        else:
+            firstTime = start - 1
         
-    lastTime = finish
+        lastTime = finish
     
-    # Convert velocities to m/s
+        # Convert velocities to m/s
     
-    atomX = 100 * velFactor * atomC[firstTime:lastTime, :, 0]
-    atomY = 100 * velFactor * atomC[firstTime:lastTime, :, 1]
-    atomZ = 100 * velFactor * atomC[firstTime:lastTime, :, 2]
+        atomX = 100 * velFactor * atomC[firstTime:lastTime, :, 0]
+        atomY = 100 * velFactor * atomC[firstTime:lastTime, :, 1]
+        atomZ = 100 * velFactor * atomC[firstTime:lastTime, :, 2]
         
-    return np.array([ atomX, atomY, atomZ ])
+        return np.array([ atomX, atomY, atomZ ])
     
-def analyzeRun(pD):
+def analyzeRun(pD, doPickle = False, overWrite = False):
 
     paths = my.makePaths(pD)
+    
+    pickleFileName = paths['data'] + pD['File Name'] + '.pickle'
+    
+    if (not overWrite) and os.path.exists(pickleFileName):
+        pickleFile = open(pickleFileName, 'rb')
+        minRun, proRun = pickle.load(pickleFile)
+        return minRun, proRun
+    
+    if pD['S'] != -pD['N0']:
+        selection = ('water', 'carbon')
+    else:
+        selection = ('carbon', )
 
     # First we need the coordinates from the pdb and dcd files
     # We'll begin with the minimization trajectory, if present
@@ -94,6 +126,7 @@ def analyzeRun(pD):
     # in the dictionary minRun
     
     minRun = {}
+    proRun = {}
     
     if pD['Run Type'] == 'New':
 
@@ -106,16 +139,19 @@ def analyzeRun(pD):
 
         print('Minimization run from record ' + str(start) + ' to ' + str(finish))
         
-        getValues(paths, pD, minRun, start, finish)
-
-        print('Initial water radius = ' + str(minRun['waterMeanRadius']) + ' A')
-        print('Initial carbon radius = ' + str(minRun['carbMeanRadius']) + ' A')
+        getValues(paths, pD, selection, minRun, start, finish)
+        calculatePhysicalValues(pD, selection, minRun)
+        minRun['zAxis'], minRun['axisPot'] = findPotential(pD, minRun)
+        minRun['initAxisPotAmp'] = (max(minRun['axisPot'])-min(minRun['axisPot']))/2
+        minRun['initAxisPotMean'] = (max(minRun['axisPot'])+min(minRun['axisPot']))/2
+        proRun['initAxisPotAmp'] = (max(minRun['axisPot'])-min(minRun['axisPot']))/2
+        proRun['initAxisPotMean'] = (max(minRun['axisPot'])+min(minRun['axisPot']))/2
+        for sel in selection:
+            print('Initial ' + sel + ' radius = ' + str(minRun[sel, 'meanRadius']) + ' A')
     
     # Now move on to the production part of the run
     # We'll save the calculated values in the dictionary proRun
     
-    proRun = {}
-
     if pD['Run Type'] == 'New':
         start = finish + 1
         finish = finish + pD['Duration']/pD['outputFreq']
@@ -127,83 +163,77 @@ def analyzeRun(pD):
 
     print('Production run from record ' + str(start) + ' to ' + str(finish))
     
-    getValues(paths, pD, proRun, start, finish)
-
-    print('Initial water radius = ' + str(proRun['waterMeanRadius']) + ' A')
-    print('Initial carbon radius = ' + str(proRun['carbMeanRadius']) + ' A')
+    getValues(paths, pD, selection, proRun, start, finish)
+    calculatePhysicalValues(pD, selection, proRun)
+    proRun['zAxis'], proRun['axisPot'] = findPotential(pD, proRun)
     
-    if pD['Run Type'] == 'New':
-        calculatePhysicalValues(pD, minRun)
-
-    calculatePhysicalValues(pD, proRun)
+    for sel in selection:
+        print('Initial ' + sel + ' radius = ' + str(proRun[sel, 'meanRadius']) + ' A')
+    
+    if doPickle:
+        pickleFile = open(pickleFileName, 'wb')
+        pickle.dump((minRun, proRun), pickleFile, protocol = -1)
     
     return minRun, proRun
     
-def getValues(paths, pD, run, start, finish):
+def getValues(paths, pD, selection, run, start, finish):
 
-    run['waterPos'] = getCoordTimeSeries(paths, pD['File Name'], start, finish, 'oxygen')
-    run['waterVel'] = getVelTimeSeries(paths, pD['File Name'], start, finish, 'oxygen')
+    atomName = { 'water': 'oxygen', 'carbon': 'carbon' }
 
-    run['carbPos'] = getCoordTimeSeries(paths, pD['File Name'], start, finish, 'carbon')
-    run['carbVel'] = getVelTimeSeries(paths, pD['File Name'], start, finish, 'carbon')
+    for sel in selection:
 
-    run['waterRadius'] = np.sqrt(run['waterPos'][0]**2 + run['waterPos'][1]**2)
-    run['waterMeanRadius'] = np.mean(run['waterRadius'][0,:])
-    run['carbRadius'] = np.sqrt(run['carbPos'][0]**2 + run['carbPos'][1]**2)
-    run['carbMeanRadius'] = np.mean(run['carbRadius'][0,:])
+        run[sel, 'pos'] = getCoordTimeSeries(paths, pD['File Name'], start, finish, atomName[sel])
+        run[sel, 'vel'] = getVelTimeSeries(paths, pD['File Name'], start, finish, atomName[sel])
 
-def calculatePhysicalValues(pD, run):
+        run[sel, 'radius'] = np.sqrt(run[sel, 'pos'][0]**2 + run[sel, 'pos'][1]**2)
+        run[sel, 'meanRadius'] = np.mean(run[sel, 'radius'][0,:])
+        
+def calculatePhysicalValues(pD, selection, run):
 
     # Length of each carbon ring, in A
-
-    ringLength = 2.456
-
-    # Calculate the offsets for the oxygens, and express them in dimensionless units
-    # The equilibrium position for a water molecule is approximately ringLength/4
-
-    eqZ = ringLength/2 + (np.arange(pD['N0']+pD['S'])-pD['N0']/2) * ringLength
-    run['waterOffset'] = (run['waterPos'][2] - eqZ)/ringLength
-
     # Carbon and water masses, in kg
 
-    carbMass = 1.994e-26
-    waterMass = 2.991e-26
-
-    # Calculate the KE and temperature of the water and carbon atoms
-
-    run['carbKE'] = 0.5 * carbMass * run['carbVel']**2
-    run['waterKE'] = 0.5 * waterMass * run['waterVel']**2
-    
+    ringLength = 2.456
+    mass = { 'water': 2.991e-26, 'carbon': 1.994e-26 }
     kB = 1.381e-23
 
-    run['carbTemp'] = 2 * run['carbKE'] / kB
-    run['waterTemp'] = 2 * run['waterKE'] / kB
+    for sel in selection:
     
-    # Calculate some mean values by summing over the relevant atoms or molecules
+        # Calculate the offsets for the oxygens, and express them in dimensionless units
+        # The equilibrium position for a water molecule is approximately ringLength/4
 
-    run['waterMeanVel'] = np.mean(run['waterVel'], axis = 2)
-    run['waterMeanPos'] = np.mean(run['waterPos'], axis = 2)
+        if sel == 'water':
+            eqZ = ringLength/2 + (np.arange(pD['N0']+pD['S'])-pD['N0']/2) * ringLength
+            run[sel, 'offset'] = (run[sel, 'pos'][2] - eqZ)/ringLength
+
+        # Calculate the KE and temperature of the water and carbon atoms
+
+        run[sel, 'KE'] = 0.5 * mass[sel] * run[sel, 'vel']**2
     
-    run['carbMeanKE'] = np.mean(run['carbKE'], axis = 2)
-    run['waterMeanKE'] = np.mean(run['waterKE'], axis = 2)
+        run[sel, 'temp'] = 2 * run[sel, 'KE'] / kB
     
-    run['carbMeanTemp'] = np.mean(run['carbTemp'], axis = 2)
-    run['waterMeanTemp'] = np.mean(run['waterTemp'], axis = 2)
+        # Calculate some mean values by summing over the relevant atoms or molecules
+
+        run[sel, 'meanVel'] = np.mean(run[sel, 'vel'], axis = 2)
+        run[sel, 'meanPos'] = np.mean(run[sel, 'pos'], axis = 2)    
+        run[sel, 'meanKE'] = np.mean(run[sel, 'KE'], axis = 2)
+        run[sel, 'meanTemp'] = np.mean(run[sel, 'temp'], axis = 2)    
+    
     
 def calculateFlowRate(pD, run):
 
     x = run['time']
-    y = run['waterMeanPos'][2]
+    y = run['water', 'meanPos'][2]
     fit = np.polyfit(x, y, 1)
     
     return fit[0]
 
 def calculateWork(pD, run):
 
-    KE = np.sum(run['waterKE'], axis = 0)
+    KE = np.sum(run['water', 'KE'], axis = 0)
     totalKE = np.sum(KE, axis = 1)
     deltaKE = np.diff(totalKE)
-    deltaZ = np.diff(run['waterMeanPos'][2])
+    deltaZ = np.diff(run['water', 'meanPos'][2])
     work = (pD['N0'] + pD['S']) * pD['Force (pN)'] * deltaZ * 1e-22
     
     return deltaKE, work
@@ -254,11 +284,17 @@ def findSolitons(offset):
     
         return np.array([ M1, M1 ])
 
-def findPotential(pD, run, frame = 0, nPoints = 50, rings = (), cutoff = 0):
+def findPotential(pD, run, frame = 0, nPoints = 50, rings = (), cutoff = 0, field = 'CHARMM'):
 
     wavelength = 2.456
     L = wavelength * pD['N0']
-    kB = 1.381e-23
+    
+    if field == 'AMBER':
+        epsilon = 9.3368e-22
+        R = 3.5692
+    else:
+        epsilon = 7.1689e-22
+        R = 3.7606
     
     if rings == ():
         ringRange = range(0, pD['N0'] * nPoints)
@@ -267,7 +303,7 @@ def findPotential(pD, run, frame = 0, nPoints = 50, rings = (), cutoff = 0):
     
     zVec = np.array(ringRange) * (wavelength/nPoints) - L/2
 
-    coords = run['carbPos'][:, frame, :]
+    coords = run['carbon', 'pos'][:, frame, :]
     nCarb = coords.shape[1]
 
     V = np.zeros(zVec.shape)
@@ -277,27 +313,27 @@ def findPotential(pD, run, frame = 0, nPoints = 50, rings = (), cutoff = 0):
     
         r1 = (0, 0, zVec[index])
     
-        V[index] = sumLJ(nCarb, r1, r2, L, cutoff)
+        V[index] = sumLJ(nCarb, r1, r2, L, cutoff, epsilon = epsilon, R = R)
+        
+    amplitude = (max(V) - min(V))/2
+    mean = (max(V) + min(V))/2
 
     return zVec, V
     
-def sumLJ(nCarb, (x1, y1, z1), (x2, y2, z2), L, cutoff):
+def sumLJ(nCarb, (x1, y1, z1), (x2, y2, z2), L, cutoff, epsilon = 7.1689e-22, R = 3.7606):
 
     fixL = np.zeros(z2.shape)
     fixL[z2-z1 > L/2] = L
     fixL[z2-z1 < -L/2] = -L
     r = np.sqrt((x1-x2)**2 + (y1-y2)**2 + (z1-z2+fixL)**2)
-    V = LJ(r)
+    V = LJ(r, epsilon, R)
     if cutoff > 0:
         V[r > cutoff] = 0
     
     return sum(V)
 
-def LJ(r):
+def LJ(r, epsilon, R):
 
-    epsilon = 2.267e-21
-    R = 3.7606
-    
     V = epsilon * ((R/r)**12 - 2*(R/r)**6)
     
     return V

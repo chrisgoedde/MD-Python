@@ -18,7 +18,7 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
     
-def makePaths(paramDict):
+def makePaths(paramDict, groupRuns = False):
 
     paths = {}
     paths['home'] = os.path.abspath('..') + '/'
@@ -43,7 +43,13 @@ def makePaths(paramDict):
         paths['parent data'] = paths['tfinal'] + paramDict['File Name'] + '/'
         paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/' + 'Extend-1' + '/'
 
-    paths['pictures'] = paths['data'] + 'Pictures' + '/'
+    if not groupRuns:
+    
+        paths['pictures'] = paths['data'] + 'Pictures' + '/'
+        
+    else:
+    
+        paths['pictures'] = paths['tfinal'] + 'Pictures' + '/'
 
     return paths
     
@@ -56,6 +62,10 @@ def num2Str(theNum):
     else:
     
         return u'−' + str(-theNum)
+
+def makeFlowRateString(mean, std):
+
+    return u'Flow rate = {0:.0f} ± {1:.0f}'.format(mean, std) + ' A/ns'
         
 def setParamDefaults():
 

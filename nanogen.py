@@ -182,15 +182,6 @@ def waterWrite(paths, fileName, N0, S):
     sBondFormat  = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}\n"
     sAngleFormat = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}{8: >8}\n"
 
-    # Bonds lengths for different armchair nanotubes, now in Angstroms
-    s0 = 1.418
-    
-    # Calculates the apothem of each regular hexagon in the nanotube and then
-    # calculates the distance between the center of each ring in the tube
-    #apothem = s*np.sqrt(3)/2
-    l = float(N0-0.75) * s0 * np.sqrt(3)
-    dist = s0*np.sqrt(3)
-
     # Initializing lists used below
     atoms = []
     bonds = []
@@ -303,20 +294,18 @@ def waterWrite(paths, fileName, N0, S):
 
             anglesFinal.append( " " + tempStr + "\n" )
 
-    sFactorAdjust = float(N0) / (N0 + S)
+    oxZ = waterZ(N0, S)
 
-    for i in range(0,3*(N0+S), 3):
-        oxZ = dist/4 + ((i/3)*dist*sFactorAdjust)
-        hyZ = oxZ + 0.570
-        if i==0:
-            pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, i/3+2, oxZ)
-            pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, hyZ) )
-            pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, hyZ) )
-        
+    for i in range(0, N0+S):
+        hyZ = oxZ[i] + 0.570
+        if i == 0:
+            pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, 2, oxZ[i])
+            pdbLines.append( hydro1.format(nAtoms+2, 2, hyZ) )
+            pdbLines.append( hydro2.format(nAtoms+3, 2, hyZ) )
         else:
-            pdbLines.append( oxygen.format(nAtoms+i+1, i/3+2, oxZ) )
-            pdbLines.append( hydro1.format(nAtoms+(i+2), i/3+2, hyZ) )
-            pdbLines.append( hydro2.format(nAtoms+(i+3), i/3+2, hyZ) )
+            pdbLines.append( oxygen.format(nAtoms + 3*i+1, i+2, oxZ[i]) )
+            pdbLines.append( hydro1.format(nAtoms + (3*i+2), i+2, hyZ) )
+            pdbLines.append( hydro2.format(nAtoms + (3*i+3), i+2, hyZ) )
 
     # Writes the new pdb lines to a new pdb file
     pdbLines.append("END\n")
@@ -357,6 +346,44 @@ def waterWrite(paths, fileName, N0, S):
     VMDin.stdin.flush()
     VMDin.stdin.close
     VMDin.communicate()
+    
+def waterZ(N0, S, equalSpacing = False):
+
+    # Bonds lengths for different armchair nanotubes, in angstroms
+    s0 = 1.418
+    
+    # Calculates the apothem of each regular hexagon in the nanotube and then
+    # calculates the distance between the center of each ring in the tube
+    # apothem = s*np.sqrt(3)/2
+    dist = s0*np.sqrt(3)
+
+    if equalSpacing:
+    
+        if N0 + S != 0:
+            sFactorAdjust = float(N0) / (N0 + S)
+        else:
+            sFactorAdjust = 0
+    
+        oxZ = dist/4 + np.array(range(0, N0+S))*dist*sFactorAdjust
+    
+    else:
+    
+        x = np.array(range(0, N0+S))/float(N0+S)
+        width = -np.sign(S)*N0/10
+
+        x0 = np.array(range(0, 2*np.abs(S)))/(2.0*np.abs(S)) + 1.0/(4*np.abs(S))
+
+        z = np.zeros(N0+S)
+
+        for i in range(0,len(x0)):
+            z = z + np.arctan(np.exp(width*(x-x0[i])))/np.pi
+            
+        if S > 0:
+            z = z - 1
+
+        oxZ = dist/4 + np.array(range(0, N0+S))*dist + dist*z
+        
+    return oxZ
     
 def pdbWrite(paths, fileName, name, value):
     
@@ -574,10 +601,11 @@ def runSim(simPath, simFile, output, hostname):
     numThreads = {}
     numThreads['cascade'] = '+p4'
     numThreads['Home-iMac'] = '+p4'
-    numThreads['nanotube'] = '+p2'
+    numThreads['nanotube'] = '+p16'
     numThreads['CGG-MacBook-Air'] = '+p2'
 
-    Namd2in=subprocess.Popen(['namd2', numThreads[hostname], simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
+    Namd2in=subprocess.Popen(['namd2-cuda', numThreads[hostname], '+isomalloc_sync', \
+                simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
     Namd2in.stdin.flush()
     Namd2in.stdin.close
     Namd2in.communicate()
@@ -669,14 +697,22 @@ def run(paramDict):
     
         if not os.path.isfile(hostname + '.csv'):
         
+            print("################################################################\n" \
+                + "Creating file " + hostname + ".csv." + "\n" \
+                + "################################################################\n")
+        
             outFile = open(hostname + '.csv', "w")
             outFile.write("Date,Run Time (h),File Name,Folder,Run Type,N0,S,n,m," \
                 + "Temperature (K),Damping,Thermostat," \
-                + "Force,PME,Restraint,Duration,Min Duration,dt (fs),outputFreq\n")
+                + "Force (pN),PME,Restraint,Duration,Min Duration,dt (fs),outputFreq\n")
                 
+        print("################################################################\n" \
+              + "Writing to file " + hostname + ".csv." + "\n" \
+              + "################################################################\n")
+              
         outFile = open(hostname + '.csv', "a")
         outFile.write(str(datetime.date.today()) + ',' \
-            + "{:.1f}".format(runTime) + ',' \
+            + "{:.5f}".format(runTime) + ',' \
             + paramDict['File Name'] + ',' \
             + paramDict['Folder'] + ',' \
             + paramDict['Run Type'] + ',' \
@@ -694,5 +730,9 @@ def run(paramDict):
             + str(paramDict['Min Duration']) + ',' \
             + str(paramDict['dt (fs)']) + ',' \
             + str(paramDict['outputFreq']) + '\n')
+     
+    print("################################################################\n" \
+          + "Moving " + paths['run'] + " to " + paths['data'] + ".\n" \
+          + "################################################################\n")
         
     shutil.move(paths['run'], paths['data'])
