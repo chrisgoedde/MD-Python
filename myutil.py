@@ -27,6 +27,9 @@ def makePaths(paramDict, groupRuns = False):
     paths['pbc'] = paths['N0'] + 'PBC/'
     paths['solvate'] = paths['pbc'] + 'PME ' + paramDict['PME'] + '/' + 'S = ' + str(paramDict['S']) + '/'
     paths['restraint'] = paths['solvate'] + 'R = ' + str(paramDict['Restraint']) + '/'
+    paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+         +', dt = ' + str(paramDict['dt (fs)']) \
+        + ', Out = ' + str(paramDict['outputFreq']) +  '/'
     paths['forcing'] = paths['restraint'] + 'F = ' + str(paramDict['Force (pN)']) + ' pN' + '/'
     if paramDict['Thermostat'] == 'On':
         paths['temperature'] = paths['forcing'] + 'Temp = ' + str(paramDict['Temperature (K)']) \
@@ -35,7 +38,7 @@ def makePaths(paramDict, groupRuns = False):
         paths['temperature'] = paths['forcing'] + 'Temp = ' + str(paramDict['Temperature (K)']) \
             + ' K, Thermostat = ' + paramDict['Thermostat'] + '/'    
     paths['tfinal'] = paths['temperature'] + 'Run = ' + str(paramDict['Duration']) \
-        + ', Min = ' + str(paramDict['Min Duration']) + ', dt = ' + str(paramDict['dt (fs)']) \
+        + ', dt = ' + str(paramDict['dt (fs)']) \
         + ', Out = ' + str(paramDict['outputFreq']) + '/'
     if paramDict['Run Type'] == 'New':
         paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/'
@@ -87,6 +90,7 @@ def setParamDefaults():
     paramDict['Min Duration'] = 10000
     paramDict['dt (fs)'] = 1
     paramDict['outputFreq'] = 1000
+    paramDict['Config File Name'] = 'Config'
 
     return paramDict
     
