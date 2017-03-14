@@ -175,8 +175,18 @@ proc NTtemperature {molnm fileOut damping} {
     set carb [ atomselect top carbon ]
     set wtr [ atomselect top water ]
     
+    # Set the Langevin file up so that the occupancy column applies the thermostat
+    # only to the carbon, the X column applies it only to the water, and the beta
+    # column applies it to both
+    
     $carb set occupancy $damping
     $wtr set occupancy 0
+    
+    $carb set beta $damping
+    $wtr set beta $damping
+    
+    $carb set x 0
+    $wtr set x $damping
     
     set mymol [ atomselect top all ]
 

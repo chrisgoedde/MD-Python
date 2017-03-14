@@ -77,7 +77,7 @@ def animatePotentialFrame(i, xVar, yVar, time, line):
     plt.gca().texts[-1].set_text('Time = ' + '{:.2f}'.format(time[i]) + ' ns')
     return (line,)
 
-def animateWaterOffset(pD, run, style = 'o', save = False):
+def animateWaterOffset(pD, run, style = '.', save = False):
     
     yVar = run['water', 'offset']
     time = run['time']
@@ -95,7 +95,7 @@ def animateWaterOffset(pD, run, style = 'o', save = False):
     plt.title(makePlotTitle(pD))
     plt.text(0.1, 0.9, 'Time = ' + '{:.2f}'.format(time[0]) + ' ns', transform = plt.gca().transAxes)
 
-    line, = ax.plot([], [], 'o')
+    line, = ax.plot([], [], '.')
 
     anim = animation.FuncAnimation(fig, animateOffsetFrame, fargs=(xVar, yVar, time, line), \
                                    frames=numFrames, interval=40, blit=True)
@@ -145,7 +145,7 @@ def plotWaterOffset(pD, run, frame = (), save = False):
     f = plt.figure(figsize = (8,6))
 
     plt.gca().set_xlim((np.min(x), np.max(x)))
-    plt.gca().set_ylim((-0.5, 1.5))
+    plt.gca().set_ylim((-0.5, np.abs(pD['S'])+0.5))
     
     plt.xlabel('Water Index')
     plt.ylabel(r'Water Offset/$\lambda$')
@@ -154,8 +154,10 @@ def plotWaterOffset(pD, run, frame = (), save = False):
     
         while np.mean(offset[frame[i]]) > 1:
             offset[frame[i]] = offset[frame[i]] - 1
+        while np.mean(offset[frame[i]]) < 0:
+            offset[frame[i]] = offset[frame[i]] + 1
 
-        plt.plot(x, offset[frame[i]], 'o')
+        plt.plot(x, offset[frame[i]], '.')
 
     plt.title(makePlotTitle(pD))
     if save:
@@ -213,8 +215,8 @@ def plotSolitonPosition(pD, run, save = False):
         solitonPos[frame, :] = s
 
     f = plt.figure(figsize = (8,6))
-    plt.plot(run['time'], solitonPos[:,0], 'o')
-    plt.plot(run['time'], solitonPos[:,1], 'o')
+    plt.plot(run['time'], solitonPos[:,0], '.')
+    plt.plot(run['time'], solitonPos[:,1], '.')
     plt.gca().set_ylim((0, pD['N0']))
     plt.xlabel('time (ns)')
     plt.ylabel('Soliton Position (Water Index)')
@@ -225,44 +227,83 @@ def plotSolitonPosition(pD, run, save = False):
         savePlot(pD, 'SolitonPosition')
         plt.close(f)
     
-def plotWaterMeanTemperature(pD, run, save = False, xlim = ()):
+def plotWaterMeanTemperature(pD, run, save = False, xlim = (), ylim = (), fit = False):
 
     f = plt.figure(figsize = (8,6))
-    plt.plot(run['time'], 0.5*(run['water', 'meanTemp'][0] + run['water', 'meanTemp'][1]), 'o')
-    plt.plot(run['time'], run['water', 'meanTemp'][2], 'o')
+    if fit:
+        if pD['Force (pN)'] == 0:
+            setBounds = False
+        else:
+            setBounds = True
+        tXY, cXY = an.fitTS(run['time'], 0.5*(run['water', 'meanTemp'][0] + run['water', 'meanTemp'][1]), setBounds)
+        tZ, cZ = an.fitTS(run['time'], run['water', 'meanTemp'][2], setBounds)
+                
+        plt.plot(run['time'], tXY)
+        plt.plot(run['time'], tZ)
+        
+    else:
+        plt.plot(run['time'], 0.5*(run['water', 'meanTemp'][0] + run['water', 'meanTemp'][1]), '.')
+        plt.plot(run['time'], run['water', 'meanTemp'][2], '.')
+
     plt.xlabel('time (ns)')
     plt.ylabel('Water Mean Temperature (K)')
     plt.title(makePlotTitle(pD))
     if xlim != ():
         plt.gca().set_xlim(xlim)
-    plt.legend(['Transverse Temperature', 'Axial Temperature'], loc = 'best')
+    if ylim != ():
+        plt.gca().set_ylim(ylim)
+    if fit:
+        plt.legend(['Transverse Temperature {:.1f} K'.format(cXY[2]), 'Axial Temperature {:.1f} K'.format(cZ[2])], loc = 'best')
+    else:
+        plt.legend(['Transverse Temperature', 'Axial Temperature'], loc = 'best')
     plt.grid()
 
     if save:
-        savePlot(pD, 'WaterMeanTemperature')
+        if fit:
+            savePlot(pD, 'WaterMeanTemperatureFitted')
+        else:
+            savePlot(pD, 'WaterMeanTemperature')
         plt.close(f)
 
-def plotSystemTemperature(pD, run, save = False):
+def plotSystemTemperature(pD, run, save = False, ylim = (), fit = False):
 
     f = plt.figure(figsize = (8,6))
-    print(run['time'].shape)
-    print(np.mean(run['carbon', 'meanTemp'], 0).shape)
-    plt.plot(run['time'], np.mean(run['carbon', 'meanTemp'],0), 'o')
+    if fit:
+        if pD['Force (pN)'] == 0:
+            setBounds = False
+        else:
+            setBounds = True
+        tC, cC = an.fitTS(run['time'], np.mean(run['carbon', 'meanTemp'],0), setBounds)
+        tW, cW = an.fitTS(run['time'], np.mean(run['water', 'meanTemp'],0), setBounds)
+                
+        plt.plot(run['time'], tC)
+        plt.plot(run['time'], tW)
+        
+    else:
+        plt.plot(run['time'], np.mean(run['carbon', 'meanTemp'],0), '.')
+        plt.plot(run['time'], np.mean(run['water', 'meanTemp'],0), '.')
+        
     plt.xlabel('time (ns)')
     plt.ylabel('System Temperature (K)')
     plt.title(makePlotTitle(pD))
-    plt.plot(run['time'], np.mean(run['water', 'meanTemp'],0), 'o')
+    if ylim != ():
+        plt.gca().set_ylim(ylim)
     plt.legend(['Carbon', 'Water'], loc = 'best')
     plt.grid()
     
     if save:
-        savePlot(pD, 'SystemTemperature')
+        if fit:
+            savePlot(pD, 'SystemTemperatureFitted')
+        else:
+            savePlot(pD, 'SystemTemperature')
+        
         plt.close(f)
 
 def plotWaterMeanPosition(pD, run, save = False, ylim = ()):
 
+    ms = dict(markersize = 3)
     f = plt.figure(figsize = (8,6))
-    plt.plot(run['time'], run['water', 'meanPos'][2], 'o')
+    plt.plot(run['time'], run['water', 'meanPos'][2], '.', **ms)
     plt.xlabel('time (ns)')
     plt.ylabel('Water Mean Position (A)')
     plt.title(makePlotTitle(pD))
@@ -277,16 +318,16 @@ def plotWaterMeanPosition(pD, run, save = False, ylim = ()):
 def plotWaterMeanVelocity(pD, run, save = False):
 
     f = plt.figure(figsize = (8,6))
-    plt.plot(run['time'], 10*run['water', 'meanVel'][2], 'o')
+    plt.plot(run['time'], 10*run['water', 'meanVel'][2], '.')
     plt.xlabel('time (ns)')
-    plt.ylabel('Mean Water Vel (A/ns)')
+    plt.ylabel('Water Mean Vel (A/ns)')
     plt.title(makePlotTitle(pD))
     plt.grid()
     
     if save:
         savePlot(pD, 'WaterMeanVelocity')
         plt.close(f)
-    
+
 def plotGroupFlowRate(pD, f, t, runs = (1, 10), frameRange = (5000, 10000), xLim = (5, 10), yLim = (-800, 800), slice = False):
 
     v = {}
@@ -319,7 +360,7 @@ def plotGroupFlowRate(pD, f, t, runs = (1, 10), frameRange = (5000, 10000), xLim
                 
                 if slice:
                     for i in range(0, numSlice):
-                        [ vel, pos ] = np.polyfit(pR['time'][frameRange[0]+i*sliceSize:frameRange[0]+(i+1)*sliceSize], pR['water', 'meanPos'][2, frameRange[0]+i*sliceSize:frameRange[0]+(i+1)*sliceSize],1)
+                        [ vel, pos ] = np.polyfit(pR['time'][frameRange[0]+i*sliceSize:frameRange[0]+(i+1)*sliceSize], pR['water', 'meanPos'][2, frameRange[0]+i*sliceSize:frameRange[0]+(i+1)*sliceSize], 1)
                         v[force, temp][num, i] = vel
                         tSlice[i] = np.mean(pR['time'][frameRange[0]+i*sliceSize:frameRange[0]+(i+1)*sliceSize])
                 
@@ -434,3 +475,16 @@ def savePlot(pD, fileName, groupRuns = False):
     print('Saving ' + fileName + '.pdf' + ' to ' + savePath)
     plt.savefig(savePath + fileName + '.pdf')
 
+def plotFlowRateTemperature():
+
+    kB = 1.381e-23
+    mW = 2.991e-26
+
+    T = np.linspace(0, 400, 1000)
+    v = np.sqrt(3*kB*T/mW);
+    
+    plt.plot(T, 10*v)
+    plt.xlabel('Temperature (K)')
+    plt.ylabel('Corresponding Velocity (A/ns)')
+    plt.grid()
+    plt.savefig('VofT.pdf')

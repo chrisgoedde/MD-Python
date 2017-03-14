@@ -3,54 +3,49 @@ import numpy as np
 import myutil as my
 import cPickle as pickle
 import os.path
+from scipy.optimize import curve_fit
 
-def getCoordTimeSeries(paths, runFile, start, finish, atomName):
+def getTimeSeries(path, pD, start, finish, atomName):
 
-    pdbFile = paths['data'] + runFile + '.pdb'
-    dcdFile = paths['data'] + runFile + '.dcd'
+    velFactor = 20.45482706
+    
+    pdbFile = path + pD['Config File Name'] + '.pdb'
+    dcdFile = path + pD['Data File Name'] + '.dcd'
+    veldcdFile = path + pD['Data File Name'] + '.veldcd'
 
     # Now, open up the DCD file and get the ensembles for the carbons and oxygens
 
     structure = parsePDB(pdbFile)
-    ensemble = parseDCD(dcdFile)
+    coordEnsemble = parseDCD(dcdFile)
+    velEnsemble = parseDCD(veldcdFile)
 
     atom = structure.select(atomName)
     
     if atom is None:
     
-        return np.array([])
+        return np.array([]), np.array([])
         
     else:
     
-        ensemble.setAtoms(atom)
-        atomC = ensemble.getCoordsets()
+        coordEnsemble.setAtoms(atom)
+        atomC = coordEnsemble.getCoordsets()
     
-        if start == 0:
-            firstTime = 0
-        else:
-            firstTime = start - 1
+        firstTime = start - 1
         
         lastTime = finish
     
-        atomX = atomC[firstTime:lastTime, :, 0]
-        atomY = atomC[firstTime:lastTime, :, 1]
-        atomZ = atomC[firstTime:lastTime, :, 2]
-    
-        if start == 0:
-    
-            atomC0 = getCoords(paths, runFile, atomName)
+        coordX = atomC[firstTime:lastTime, :, 0]
+        coordY = atomC[firstTime:lastTime, :, 1]
+        coordZ = atomC[firstTime:lastTime, :, 2]
         
-            if len(atomC0) != 0:
-        
-                atomX0 = atomC0[:, 0]
-                atomY0 = atomC0[:, 1]
-                atomZ0 = atomC0[:, 2]
+        velEnsemble.setAtoms(atom)
+        atomC = velEnsemble.getCoordsets()
 
-                atomX = np.concatenate((np.array([atomX0]), atomX))
-                atomY = np.concatenate((np.array([atomY0]), atomY))
-                atomZ = np.concatenate((np.array([atomZ0]), atomZ))
-    
-        return np.array([ atomX, atomY, atomZ ])
+        velX = 100 * velFactor * atomC[firstTime:lastTime, :, 0]
+        velY = 100 * velFactor * atomC[firstTime:lastTime, :, 1]
+        velZ = 100 * velFactor * atomC[firstTime:lastTime, :, 2]
+
+        return (np.array([ coordX, coordY, coordZ ]), np.array([ velX, velY, velZ ]))
 
 def getCoords(paths, runFile, atomName):
 
@@ -66,124 +61,98 @@ def getCoords(paths, runFile, atomName):
     
     return coords
     
-def getVelTimeSeries(paths, runFile, start, finish, atomName):
-
-    velFactor = 20.45482706
-    
-    pdbFile = paths['data'] + runFile + '.pdb'
-    dcdFile = paths['data'] + runFile + '.veldcd'
-
-    # Open up the DCD file and get the ensembles for the carbons and oxygens
-
-    structure = parsePDB(pdbFile)
-    ensemble = parseDCD(dcdFile)
-
-    atom = structure.select(atomName)
-
-    if atom is None:
-    
-        return np.array([])
-        
-    else:
-    
-        ensemble.setAtoms(atom)
-        atomC = ensemble.getCoordsets()
-    
-        if start == 0:
-            firstTime = 0
-        else:
-            firstTime = start - 1
-        
-        lastTime = finish
-    
-        # Convert velocities to m/s
-    
-        atomX = 100 * velFactor * atomC[firstTime:lastTime, :, 0]
-        atomY = 100 * velFactor * atomC[firstTime:lastTime, :, 1]
-        atomZ = 100 * velFactor * atomC[firstTime:lastTime, :, 2]
-        
-        return np.array([ atomX, atomY, atomZ ])
-    
 def analyzeRun(pD, doPickle = False, overWrite = False):
 
     paths = my.makePaths(pD)
-    
-    pickleFileName = paths['data'] + pD['File Name'] + '.pickle'
-    
-    if (not overWrite) and os.path.exists(pickleFileName):
-        pickleFile = open(pickleFileName, 'rb')
-        minRun, proRun = pickle.load(pickleFile)
-        return minRun, proRun
     
     if pD['S'] != -pD['N0']:
         selection = ('water', 'carbon')
     else:
         selection = ('carbon', )
 
-    # First we need the coordinates from the pdb and dcd files
-    # We'll begin with the minimization trajectory, if present
-    # We'll store the calculated values for the minimization trajectory
-    # in the dictionary minRun
+    # We'll load or find the data for the minimization run first
+    # We'll save the calculated values in the dictionary minRun
     
-    minRun = {}
-    proRun = {}
+    minPickleFileName = paths['minimization'] + pD['Data File Name'] + '.pickle'
     
-    if pD['Run Type'] == 'New':
+    if (not overWrite) and os.path.exists(minPickleFileName):
 
-        start = 0
+        pickleFile = open(minPickleFileName, 'rb')
+        minRun = pickle.load(pickleFile)
+        pickleFile.close()
+        
+    else:
+    
+        minRun = {}
+        start = 1
         finish = pD['Min Duration']/pD['outputFreq']
-
-        # Calculate the time of each snapshot, in ns
-
-        minRun['time'] = np.arange(start, finish+1) * pD['dt (fs)'] * pD['outputFreq'] / 1000000.
-
+        
         print('Minimization run from record ' + str(start) + ' to ' + str(finish))
         
-        getValues(paths, pD, selection, minRun, start, finish)
-        calculatePhysicalValues(pD, selection, minRun)
-        minRun['zAxis'], minRun['axisPot'] = findPotential(pD, minRun)
-        minRun['initAxisPotAmp'] = (max(minRun['axisPot'])-min(minRun['axisPot']))/2
-        minRun['initAxisPotMean'] = (max(minRun['axisPot'])+min(minRun['axisPot']))/2
-        proRun['initAxisPotAmp'] = (max(minRun['axisPot'])-min(minRun['axisPot']))/2
-        proRun['initAxisPotMean'] = (max(minRun['axisPot'])+min(minRun['axisPot']))/2
-        for sel in selection:
-            print('Initial ' + sel + ' radius = ' + str(minRun[sel, 'meanRadius']) + ' A')
-    
+        fillRunDict(paths['minimization'], pD, selection, start, finish, minRun)
+        
+        # We always pickle the minimization run, because it's short
+        
+        pickleFile = open(minPickleFileName, 'wb')
+        pickle.dump(minRun, pickleFile, protocol = -1)
+        pickleFile.close()
+
     # Now move on to the production part of the run
     # We'll save the calculated values in the dictionary proRun
     
-    if pD['Run Type'] == 'New':
-        start = finish + 1
-        finish = finish + pD['Duration']/pD['outputFreq']
-        proRun['time'] = np.arange(start, finish+1) * pD['dt (fs)'] * pD['outputFreq'] / 1000000.
-    else:
-        start = 1
-        finish = 1000
-        proRun['time'] = np.arange(start, finish+1) * pD['dt (fs)'] * 100 / 1000000.
+    proPickleFileName = paths['data'] + pD['Data File Name'] + '.pickle'
 
-    print('Production run from record ' + str(start) + ' to ' + str(finish))
+    if (not overWrite) and os.path.exists(proPickleFileName):
+
+        pickleFile = open(proPickleFileName, 'rb')
+        proRun = pickle.load(pickleFile)
+        
+    else:
     
-    getValues(paths, pD, selection, proRun, start, finish)
-    calculatePhysicalValues(pD, selection, proRun)
-    proRun['zAxis'], proRun['axisPot'] = findPotential(pD, proRun)
-    
-    for sel in selection:
-        print('Initial ' + sel + ' radius = ' + str(proRun[sel, 'meanRadius']) + ' A')
-    
-    if doPickle:
-        pickleFile = open(pickleFileName, 'wb')
-        pickle.dump((minRun, proRun), pickleFile, protocol = -1)
-    
+        proRun = {}
+        start = 1
+        if pD['Run Type'] == 'New':
+            finish = pD['Duration']/pD['outputFreq']
+        else:
+            finish = pD['Preheat Duration']/pD['outputFreq']
+        
+        print('Production run from record ' + str(start) + ' to ' + str(finish))
+        
+        fillRunDict(paths['data'], pD, selection, start, finish, proRun)
+        
+        # We only pickle the production run if asked to
+        
+        if doPickle:
+            pickleFile = open(proPickleFileName, 'wb')
+            pickle.dump(proRun, pickleFile, protocol = -1)
+            pickleFile.close()
+
     return minRun, proRun
     
-def getValues(paths, pD, selection, run, start, finish):
+def fillRunDict(path, pD, selection, start, finish, run):
+
+    # Calculate the time of each snapshot, in ns
+
+    run['time'] = np.arange(start, finish+1) * pD['dt (fs)'] * pD['outputFreq'] / 1000000.
+
+    getValues(path, pD, selection, run, start, finish)
+    calculatePhysicalValues(pD, selection, run)
+    run['zAxis'], run['axisPot'] = findPotential(pD, run)
+    run['initAxisPotAmp'] = (max(run['axisPot'])-min(run['axisPot']))/2
+    run['initAxisPotMean'] = (max(run['axisPot'])+min(run['axisPot']))/2
+    run['initAxisPotAmp'] = (max(run['axisPot'])-min(run['axisPot']))/2
+    run['initAxisPotMean'] = (max(run['axisPot'])+min(run['axisPot']))/2
+    for sel in selection:
+        print('Initial ' + sel + ' radius = ' + str(run[sel, 'meanRadius']) + ' A')
+    
+def getValues(path, pD, selection, run, start, finish):
 
     atomName = { 'water': 'oxygen', 'carbon': 'carbon' }
 
     for sel in selection:
 
-        run[sel, 'pos'] = getCoordTimeSeries(paths, pD['File Name'], start, finish, atomName[sel])
-        run[sel, 'vel'] = getVelTimeSeries(paths, pD['File Name'], start, finish, atomName[sel])
+        run[sel, 'pos'], run[sel, 'vel'] = getTimeSeries(path, pD, start, finish, atomName[sel])
+        # run[sel, 'vel'] = getVelTimeSeries(paths, pD, start, finish, atomName[sel])
 
         run[sel, 'radius'] = np.sqrt(run[sel, 'pos'][0]**2 + run[sel, 'pos'][1]**2)
         run[sel, 'meanRadius'] = np.mean(run[sel, 'radius'][0,:])
@@ -337,3 +306,21 @@ def LJ(r, epsilon, R):
     V = epsilon * ((R/r)**12 - 2*(R/r)**6)
     
     return V
+    
+def fitTS(t, v, setBounds = False):
+
+    # c = np.polyfit(t, v, 2)
+    # p = np.poly1d(c)
+    # u = p(t)
+    
+    if setBounds:
+        c, cov = curve_fit(exponential, t, v, max_nfev = 10000, xtol = 1e-6, bounds = ([0, 0.1, 0], [np.inf, 0.2, np.inf]))
+    else:
+        c, cov = curve_fit(exponential, t, v, maxfev = 10000, xtol = 1e-6)
+    
+    u = exponential(t, *c)
+    
+    return u, c
+           
+def exponential(x, a, b, c):
+    return c - a * np.exp(-b*x)

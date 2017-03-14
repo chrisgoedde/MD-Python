@@ -22,14 +22,11 @@ def makePaths(paramDict, groupRuns = False):
 
     paths = {}
     paths['home'] = os.path.abspath('..') + '/'
-    paths['type'] = paths['home'] + paramDict['Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
+    paths['type'] = paths['home'] + paramDict['Top Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
     paths['N0'] = paths['type'] + 'N0 = ' + str(paramDict['N0']) + '/'
     paths['pbc'] = paths['N0'] + 'PBC/'
     paths['solvate'] = paths['pbc'] + 'PME ' + paramDict['PME'] + '/' + 'S = ' + str(paramDict['S']) + '/'
     paths['restraint'] = paths['solvate'] + 'R = ' + str(paramDict['Restraint']) + '/'
-    paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
-         +', dt = ' + str(paramDict['dt (fs)']) \
-        + ', Out = ' + str(paramDict['outputFreq']) +  '/'
     paths['forcing'] = paths['restraint'] + 'F = ' + str(paramDict['Force (pN)']) + ' pN' + '/'
     if paramDict['Thermostat'] == 'On':
         paths['temperature'] = paths['forcing'] + 'Temp = ' + str(paramDict['Temperature (K)']) \
@@ -41,17 +38,23 @@ def makePaths(paramDict, groupRuns = False):
         + ', dt = ' + str(paramDict['dt (fs)']) \
         + ', Out = ' + str(paramDict['outputFreq']) + '/'
     if paramDict['Run Type'] == 'New':
-        paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/'
+        paths['data'] = paths['tfinal'] + paramDict['Data Folder'] + '/'
+        paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+            +', dt = ' + str(paramDict['dt (fs)']) \
+            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
+    elif paramDict['Run Type'] == 'Preheat':
+        paths['data'] = paths['tfinal'] + paramDict['Data Folder'] + '/Preheat' + '/'
+        paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+            +', dt = ' + str(paramDict['dt (fs)']) \
+            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
     else:
-        paths['parent data'] = paths['tfinal'] + paramDict['File Name'] + '/'
-        paths['data'] = paths['tfinal'] + paramDict['File Name'] + '/' + 'Extend-1' + '/'
+        paths['data'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+            +', dt = ' + str(paramDict['dt (fs)']) \
+            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
 
     if not groupRuns:
-    
         paths['pictures'] = paths['data'] + 'Pictures' + '/'
-        
     else:
-    
         paths['pictures'] = paths['tfinal'] + 'Pictures' + '/'
 
     return paths
@@ -73,8 +76,8 @@ def makeFlowRateString(mean, std):
 def setParamDefaults():
 
     paramDict = {}
-    paramDict['File Name'] = 'Run-1'
-    paramDict['Folder'] = 'Data'
+    paramDict['Data Folder'] = 'Run-1'
+    paramDict['Top Folder'] = 'Data'
     paramDict['Run Type'] = 'New'
     paramDict['N0'] = 200
     paramDict['S'] = -1
@@ -88,9 +91,11 @@ def setParamDefaults():
     paramDict['Restraint'] = 600
     paramDict['Duration'] = 1000000
     paramDict['Min Duration'] = 10000
+    paramDict['Preheat Duration'] = 10000
     paramDict['dt (fs)'] = 1
     paramDict['outputFreq'] = 1000
     paramDict['Config File Name'] = 'Config'
+    paramDict['Data File Name'] = 'Data'
 
     return paramDict
     
