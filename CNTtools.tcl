@@ -112,8 +112,9 @@ proc NTrestraint {molnm fileOut restraint} {
     mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
     mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
     
-    set carb [ atomselect top carbon ]
+    set carb [ atomselect top "segname TUB" ]
     set wtr [ atomselect top water ]
+    set poly [ atomselect top "segname PO1" ]
     
     if {$restraint == 0} {
     
@@ -128,6 +129,8 @@ proc NTrestraint {molnm fileOut restraint} {
     }
     $wtr set beta 0
     $wtr set occupancy 0
+    $poly set beta 0
+    $poly set occupancy 0
     
     set mymol [ atomselect top all ]
 

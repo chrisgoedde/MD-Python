@@ -17,16 +17,8 @@ import socket
 
 import myutil as my
 
-# Maybe adding later... need to think more about the implementation
-# class Nanotube:
-
-#     def __init__(self, rings, n, m):
-#         self.rings = rings
-#         self.n = n
-#         self.m = m
-
 def cntWrite(paths, fileName, N0, n, m):
-    """ nanoWrite creates a periodic nanotube with the following input parameters:
+    """ cntWrite creates a periodic nanotube with the following input parameters:
     fileName is the name of the initial nanotube with number of rings N0 and
     dimensions n x m."""
 
@@ -62,14 +54,12 @@ def cntWrite(paths, fileName, N0, n, m):
     VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
                        stdout=logFile)
 
-    sourceCNT = "source CNTtools.tcl\n"
     CNTtools = "package require CNTtools 1.0\n"
 
     genNT = "genNT " + my.quoted(fileName) + " " + my.quoted(my.config(paths['N0'])) + " " \
         + str(l) + " " + str(n) + " " + str(m) + "\n"
 
     # run commands through pipe and saves to file
-    VMDin.stdin.write(sourceCNT)
     VMDin.stdin.write(CNTtools)
     VMDin.stdin.write(genNT)
     VMDin.stdin.flush()
@@ -84,13 +74,11 @@ def cntWrite(paths, fileName, N0, n, m):
     VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
                        stdout=logFile)
 
-    sourceCNT = "source CNTtools.tcl\n"
-    CNTtools = "package require CNTtools 1.0\n"
+    CNTtools = "package require CNTtools\n"
     pbcNT = "pbcNT " + my.quoted(my.config(paths['N0']) + fileName) + " " \
         + my.quoted(my.config(paths['pbc']) + fileName) + " default\n"
 
     # run commands through pipe and saves to file
-    VMDin.stdin.write(sourceCNT)
     VMDin.stdin.write(CNTtools)
     VMDin.stdin.write(pbcNT)
     VMDin.stdin.flush()
@@ -335,12 +323,10 @@ def waterWrite(paths, fileName, N0, S):
     VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
                            stdout=logFile)
 
-    sourceCNT = "source CNTtools.tcl\n"
     CNTtools = "package require CNTtools 1.0\n"
 
     centerNT = "centerNT " + my.quoted(my.config(paths['solvate']) + fileName) + "\n"
 
-    VMDin.stdin.write(sourceCNT)
     VMDin.stdin.write(CNTtools)
     VMDin.stdin.write(centerNT)
     VMDin.stdin.flush()
@@ -408,13 +394,11 @@ def pdbWrite(paths, fileName, name, value):
     VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
                            stdout=logFile)
 
-    sourceCNT = "source CNTtools.tcl\n"
     CNTtools = "package require CNTtools 1.0\n"
 
     tclName = "NT" + name + " " + my.quoted(my.config(paths['solvate']) + fileName) + " " \
         + my.quoted(my.config(paths[name]) + fileName) + " " + str(value) + "\n"
 
-    VMDin.stdin.write(sourceCNT)
     VMDin.stdin.write(CNTtools)
     VMDin.stdin.write(tclName)
     VMDin.stdin.flush()
@@ -609,15 +593,15 @@ def moveFiles(paths, pD, wisdomFile, preheat = False):
     print("################################################################\n" \
           + "Moving additional configuration files into " + paths['run'] + ".\n" \
           + "################################################################\n")
-      
+    
     # Make a link to the parameter file in the simulation run folder
     if not os.path.exists(paths['run'] + paramFile):
-        os.link("Parameter Files/" + paramFile, paths['run'] + paramFile)
+        os.link(paths['param'] + paramFile, paths['run'] + paramFile)
         
     # Make a link to the wisdom file in the simulation run folder
     if (not os.path.exists(paths['run'] + wisdomFile)) \
-        and os.path.exists("Parameter Files/" + wisdomFile):
-        os.link("Parameter Files/" + wisdomFile, paths['run'] + wisdomFile)
+        and os.path.exists(paths['param'] + wisdomFile):
+        os.link(paths['param'] + wisdomFile, paths['run'] + wisdomFile)
     
     # Make links to all the other configuration files in the simulation run folder
     if not os.path.exists(paths['run'] + pD['Config File Name'] + '.pdb'):
@@ -699,15 +683,15 @@ def getCNTBasis(inFile):
     
     return xVec, yVec, zVec
 
-def run(paramDict):
+def run(pD):
     
     # The paths dictionary holds the path name to each tier of the data hierarchy
-    paths = my.makePaths(paramDict)
+    paths = my.makeWaterPaths(pD)
     
     hostname = socket.gethostname().partition('.')[0]
     wisdomFile = "FFTW_NAMD_2.11_" + hostname + ".txt"
 
-    if paramDict['Run Type'] == 'Minimize':
+    if pD['Run Type'] == 'Minimize':
         executable = 'namd2'
     else:
         if hostname == 'nanotube':
@@ -718,29 +702,29 @@ def run(paramDict):
         
     if os.path.exists(paths['data']):
         print("################################################################\n" \
-              + "Data folder for " + paramDict['Run Type'] + " run already exists ... aborting.\n" \
+              + "Data folder for " + pD['Run Type'] + " run already exists ... aborting.\n" \
               + "################################################################\n")
         return
             
-    cntWrite(paths, paramDict['Config File Name'], paramDict['N0'], paramDict['n'], paramDict['m'])
-    waterWrite(paths, paramDict['Config File Name'], paramDict['N0'], paramDict['S'])
-    pdbWrite(paths, paramDict['Config File Name'], 'restraint', paramDict['Restraint'])
+    cntWrite(paths, pD['Config File Name'], pD['N0'], pD['n'], pD['m'])
+    waterWrite(paths, pD['Config File Name'], pD['N0'], pD['S'])
+    pdbWrite(paths, pD['Config File Name'], 'restraint', pD['Restraint'])
     
-    if paramDict['Run Type'] == 'New':
+    if pD['Run Type'] == 'New':
     
-        pdbWrite(paths, paramDict['Config File Name'], 'forcing', paramDict['Force (pN)'])
-        pdbWrite(paths, paramDict['Config File Name'], 'temperature', paramDict['Damping'])
+        pdbWrite(paths, pD['Config File Name'], 'forcing', pD['Force (pN)'])
+        pdbWrite(paths, pD['Config File Name'], 'temperature', pD['Damping'])
         
-        paths['run'] = os.getenv('HOME') + '/' + paramDict['Data Folder'] + '/Preheat/'
-        preheatConfFile = confWrite(paths, paramDict, hostname, wisdomFile, preheat = True)
-        moveFiles(paths, paramDict, wisdomFile, preheat = True)
-        result, runTime = runSim(executable, paths['run'], preheatConfFile, paramDict['Config File Name'], hostname)
+        paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/Preheat/'
+        preheatConfFile = confWrite(paths, pD, hostname, wisdomFile, preheat = True)
+        moveFiles(paths, pD, wisdomFile, preheat = True)
+        result, runTime = runSim(executable, paths['run'], preheatConfFile, pD['Config File Name'], hostname)
     
-    paths['run'] = os.getenv('HOME') + '/' + paramDict['Data Folder'] + '/'
+    paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/'
     
-    confFile = confWrite(paths, paramDict, hostname, wisdomFile)
-    moveFiles(paths, paramDict, wisdomFile)
-    result, runTime = runSim(executable, paths['run'], confFile, paramDict['Config File Name'], hostname)
+    confFile = confWrite(paths, pD, hostname, wisdomFile)
+    moveFiles(paths, pD, wisdomFile)
+    result, runTime = runSim(executable, paths['run'], confFile, pD['Config File Name'], hostname)
     
     if result == 0:
     
@@ -762,27 +746,27 @@ def run(paramDict):
         outFile = open(hostname + '.csv', "a")
         outFile.write(str(datetime.date.today()) + ',' \
             + "{:.5f}".format(runTime) + ',' \
-            + paramDict['Data Folder'] + ',' \
-            + paramDict['Top Folder'] + ',' \
-            + paramDict['Run Type'] + ',' \
-            + str(paramDict['N0']) + ',' \
-            + str(paramDict['S']) + ',' \
-            + str(paramDict['n']) + ',' \
-            + str(paramDict['m']) + ',' \
-            + str(paramDict['Temperature (K)']) + ',' \
-            + str(paramDict['Damping']) + ',' \
-            + paramDict['Thermostat'] + ',' \
-            + str(paramDict['Force (pN)']) + ',' \
-            + paramDict['PME'] + ','
-            + str(paramDict['Restraint']) + ',' \
-            + str(paramDict['Duration']) + ',' \
-            + str(paramDict['Min Duration']) + ',' \
-            + str(paramDict['dt (fs)']) + ',' \
-            + str(paramDict['outputFreq']) + '\n')
+            + pD['Data Folder'] + ',' \
+            + pD['Top Folder'] + ',' \
+            + pD['Run Type'] + ',' \
+            + str(pD['N0']) + ',' \
+            + str(pD['S']) + ',' \
+            + str(pD['n']) + ',' \
+            + str(pD['m']) + ',' \
+            + str(pD['Temperature (K)']) + ',' \
+            + str(pD['Damping']) + ',' \
+            + pD['Thermostat'] + ',' \
+            + str(pD['Force (pN)']) + ',' \
+            + pD['PME'] + ','
+            + str(pD['Restraint']) + ',' \
+            + str(pD['Duration']) + ',' \
+            + str(pD['Min Duration']) + ',' \
+            + str(pD['dt (fs)']) + ',' \
+            + str(pD['outputFreq']) + '\n')
     
     print("################################################################\n" \
-              + "Finished writing to file " + hostname + ".csv." + "\n" \
-              + "################################################################\n")
+          + "Finished writing to file " + hostname + ".csv." + "\n" \
+          + "################################################################\n")
     print("################################################################\n" \
           + "Moving " + paths['run'] + " to " + paths['data'] + ".\n" \
           + "################################################################\n")

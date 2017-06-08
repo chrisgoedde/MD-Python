@@ -63,7 +63,7 @@ def getCoords(paths, runFile, atomName):
     
 def analyzeRun(pD, doPickle = False, overWrite = False):
 
-    paths = my.makePaths(pD)
+    paths = my.makeWaterPaths(pD)
     
     if pD['S'] != -pD['N0']:
         selection = ('water', 'carbon')

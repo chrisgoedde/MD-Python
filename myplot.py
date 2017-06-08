@@ -9,6 +9,17 @@ from datetime import datetime
 import analysis as an
 import myutil as my
 
+def animateDihedralChain(pD, run, save = False):
+
+def animateDihedralFrame(i, bN, phi, time, line):
+    
+    plt.gca().texts[-1].set_text('Time = ' + '{:.1f}'.format(float(time[i])) + ' ps')
+
+    line.set_data(bN, phi[i,:])
+    return (line,)
+
+
+
 def animatePotential(pD, run, rings = (), cutoff = 0, save = False, field = 'CHARMM'):
 
     nFrames = run['carbon', 'pos'].shape[1]
@@ -51,7 +62,7 @@ def animatePotential(pD, run, rings = (), cutoff = 0, save = False, field = 'CHA
     # Note that fps must match the interval given above ...
     
     if save:
-        savePath = my.makePaths(pD)['pictures']
+        savePath = my.makeWaterPaths(pD)['pictures']
         if not os.path.exists(savePath):
             os.makedirs(savePath)
     
@@ -103,7 +114,7 @@ def animateWaterOffset(pD, run, style = '.', save = False):
     # Note that fps must match the interval given above ...
     
     if save:
-        savePath = my.makePaths(pD)['pictures']
+        savePath = my.makeWaterPaths(pD)['pictures']
         if not os.path.exists(savePath):
             os.makedirs(savePath)
         fileName = 'WaterOffset.mp4'
@@ -468,7 +479,7 @@ def makePotentialPlotTitle(pD, cutoff, field, amplitude, showAmplitude = False):
 
 def savePlot(pD, fileName, groupRuns = False):
 
-    savePath = my.makePaths(pD, groupRuns)['pictures']
+    savePath = my.makeWaterPaths(pD, groupRuns)['pictures']
     if not os.path.exists(savePath):
         os.makedirs(savePath)
 

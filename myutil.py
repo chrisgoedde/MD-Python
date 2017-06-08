@@ -18,10 +18,10 @@ def configFile(thePath, theFile):
 
     return config(thePath) + theFile
     
-def makePaths(paramDict, groupRuns = False):
+def makeWaterPaths(paramDict, groupRuns = False):
 
     paths = {}
-    paths['home'] = os.path.abspath('..') + '/'
+    paths['home'] = os.path.abspath('..') + '/' + 'Water' + '/'
     paths['type'] = paths['home'] + paramDict['Top Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
     paths['N0'] = paths['type'] + 'N0 = ' + str(paramDict['N0']) + '/'
     paths['pbc'] = paths['N0'] + 'PBC/'
@@ -42,11 +42,6 @@ def makePaths(paramDict, groupRuns = False):
         paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
             +', dt = ' + str(paramDict['dt (fs)']) \
             + ', Out = ' + str(paramDict['outputFreq']) +  '/'
-    elif paramDict['Run Type'] == 'Preheat':
-        paths['data'] = paths['tfinal'] + paramDict['Data Folder'] + '/Preheat' + '/'
-        paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
-            +', dt = ' + str(paramDict['dt (fs)']) \
-            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
     else:
         paths['data'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
             +', dt = ' + str(paramDict['dt (fs)']) \
@@ -56,6 +51,38 @@ def makePaths(paramDict, groupRuns = False):
         paths['pictures'] = paths['data'] + 'Pictures' + '/'
     else:
         paths['pictures'] = paths['tfinal'] + 'Pictures' + '/'
+        
+    paths['param'] = os.path.abspath('..') + '/Source/Parameter Files' + '/'
+
+    return paths
+    
+def makePolymerPaths(paramDict):
+
+    paths = {}
+    paths['home'] = os.path.abspath('..') + '/' + 'Polymers' + '/'
+    paths['type'] = paths['home'] + paramDict['Top Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
+    paths['L'] = paths['type'] + 'L = ' + str(paramDict['L']) + '/'
+    paths['polymer'] = paths['L'] + paramDict['Polymer'] + '/'
+
+    paths['restraint'] = paths['polymer'] + 'R = ' + str(paramDict['Restraint']) + '/'
+    paths['driving amplitude'] = paths['restraint'] + 'A = ' + str(paramDict['Driving Amplitude (A)']) + ' A/'
+    paths['driving period'] = paths['driving amplitude'] + 'P = ' + str(paramDict['Driving Period (ps)']) + ' ps/'
+    paths['tfinal'] = paths['driving period'] + 'Run = ' + str(paramDict['Duration']) \
+        + ', dt = ' + str(paramDict['dt (fs)']) \
+        + ', Out = ' + str(paramDict['outputFreq']) + '/'
+
+    if paramDict['Run Type'] == 'New':
+        paths['data'] = paths['tfinal'] + paramDict['Data Folder'] + '/'
+        paths['minimization'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+            +', dt = ' + str(paramDict['dt (fs)']) \
+            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
+    else:
+        paths['data'] = config(paths['restraint']) + 'Min = ' + str(paramDict['Min Duration']) \
+            +', dt = ' + str(paramDict['dt (fs)']) \
+            + ', Out = ' + str(paramDict['outputFreq']) +  '/'
+    
+    paths['param'] = os.path.abspath('..') + '/Source/Parameter Files' + '/'
+    paths['pdb'] = os.path.abspath('..') + '/Source/Polymer PDB Files' + '/'
 
     return paths
     
@@ -73,12 +100,13 @@ def makeFlowRateString(mean, std):
 
     return u'Flow rate = {0:.0f} ± {1:.0f}'.format(mean, std) + ' A/ns'
         
-def setParamDefaults():
+def setWaterParamDefaults():
 
     paramDict = {}
+    paramDict['System'] = 'Water'
     paramDict['Data Folder'] = 'Run-1'
     paramDict['Top Folder'] = 'Data'
-    paramDict['Run Type'] = 'New'
+    paramDict['Run Type'] = 'Minimize' # Alternate: 'New'
     paramDict['N0'] = 200
     paramDict['S'] = -1
     paramDict['n'] = 4
@@ -86,7 +114,7 @@ def setParamDefaults():
     paramDict['Temperature (K)'] = 5
     paramDict['Damping'] = 1
     paramDict['Thermostat'] = 'On'
-    paramDict['Force (pN)'] = 0.2
+    paramDict['Force (pN)'] = 0.02
     paramDict['PME'] = 'on'
     paramDict['Restraint'] = 600
     paramDict['Duration'] = 1000000
@@ -99,10 +127,39 @@ def setParamDefaults():
 
     return paramDict
     
+def setPolymerParamDefaults():
+
+    paramDict = {}
+    paramDict['System'] = 'Polymers'
+    paramDict['Data Folder'] = 'Run-1'
+    paramDict['Top Folder'] = 'Data'
+    paramDict['Run Type'] = 'Minimize'
+    paramDict['L'] = 200
+    paramDict['n'] = 8
+    paramDict['m'] = 8
+    paramDict['Polymer'] = 'PE50m'
+    paramDict['Base Polymer'] = 'PE50'
+    paramDict['Temperature (K)'] = 0
+    paramDict['Damping'] = 1
+    paramDict['Thermostat'] = 'Off'
+    paramDict['Restraint'] = 600
+    paramDict['Duration'] = 20000
+    paramDict['Min Duration'] = 1000
+    paramDict['dt (fs)'] = 1
+    paramDict['outputFreq'] = 10
+    paramDict['Config File Name'] = 'Config'
+    paramDict['Data File Name'] = 'Data'
+    paramDict['tcl Forces'] = True
+    paramDict['tcl Script'] = 'forces.tcl'
+    paramDict['Driving Amplitude (A)'] = 2
+    paramDict['Driving Period (ps)'] = 2
+
+    return paramDict
+
 import csv
 import pprint 
 
-def readCSV(cvsName, inputParams):
+def readWaterCSV(cvsName, inputParams):
 
     inputItems = inputParams.items()
     
