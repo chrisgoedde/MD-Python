@@ -1,8 +1,9 @@
 ### Written by Matthew Kwiecien Jul, 2015
 ### Modified by CGG, spring 2016
+### Additional modifications, and updating to python 3, summer 2017
 
-from __future__ import print_function
-from __future__ import division
+# from __future__ import print_function
+# from __future__ import division
 
 import numpy as np
 from scipy import *
@@ -17,6 +18,202 @@ import socket
 
 import myutil as my
 
+def run(pD):
+    """ This is the main entry point for performing simulations with a carbon nanotube
+    and water. It takes a python dictionary of simulation parameters as its
+    argument. Before calling run, you must call myutil.setWaterParamDefaults()
+    to create the dictionary."""
+    
+    # The paths dictionary holds the path name to each tier of the data hierarchy.
+    
+    paths = my.makeWaterPaths(pD)
+    
+    # Find the hostname and set the name of the wisdom file used by PME.
+    
+    hostname = socket.gethostname().partition('.')[0]
+    wisdomFile = "FFTW_NAMD_2.11_" + hostname + ".txt"
+
+    # If we're doing a production run (not a minimization) on nanotube, we want to
+    # use the GPU, so we run the CUDA version of namd2. The CUDA version of namd seems
+    # to give errors occasionally when minimizing, so we don't use it for that.
+    
+    if pD['Run Type'] == 'Minimize':
+        executable = 'namd2'
+    else:
+        if hostname == 'nanotube':
+            executable = 'namd2-cuda'
+        else:
+            executable = 'namd2'
+        
+    # If the data folder for the simulation already exists, abort, under the assumption
+    # that this is an accidental duplicate of an earlier run. New runs should go into
+    # their own folders.
+    
+    if os.path.exists(paths['data']):
+        print("################################################################\n" \
+              + "Data folder for " + pD['Run Type'] + " run already exists ... aborting.\n" \
+              + "################################################################\n")
+        return
+
+    # This is the base name for all the various pdb and psf files we will generate.
+    
+    fileName = pD['Config File Name']
+
+    # Bonds lengths of armchair nanotubes in nanometers. From this we'll calculate the
+    # actual length of the nanotube in nanometers to feed to VMD.
+    
+    s0 = 0.1418
+    l = float(pD['N0']-0.75) * s0 * np.sqrt(3)
+
+    # Create the desired nanotube. The files will be stored in the 'Config Files' folder
+    # in the folder pointed to by paths['N0'].
+    
+    package = "package require CNTtools 1.0\n"
+    commands = [ "genNT " \
+                + my.quoted(my.configFile(paths['N0'], fileName)) + " " \
+                + str(l) + " " + str(pD['n']) + " " + str(pD['m']) + "\n" ]
+   
+    my.pdbWrite(paths['N0'], fileName, package, commands)
+    
+    # Now we'll make the nanotube periodic in the z direction.
+    
+    commands = [ "pbcNT " + my.quoted(my.configFile(paths['N0'], fileName)) + " " \
+                + my.quoted(my.configFile(paths['pbc'], fileName)) + " default\n" ]
+
+    my.pdbWrite(paths['pbc'], fileName, package, commands)  
+    
+    # Delete the now-uneeded -prebond pdb and psf files.
+    
+    if os.path.exists(my.config(paths['pbc']) + fileName + "-prebond.pdb"):
+        os.remove(my.config(paths['pbc']) + fileName + "-prebond.pdb")
+    if os.path.exists(my.config(paths['pbc']) + fileName + "-prebond.psf"):
+        os.remove(my.config(paths['pbc']) + fileName + "-prebond.psf")
+    
+    # Read back in the pdb file and make sure the z-coordinate spacing is regular.
+    
+    alignCNT(my.config(paths['pbc']) + fileName + ".pdb")
+
+    # cntWrite(paths, pD['Config File Name'], pD['N0'], pD['n'], pD['m'])
+    
+    # Add the water to the carbon nanotube, and center the nanotube in the box.
+    
+    waterWrite(paths, pD['Config File Name'], pD['N0'], pD['S'])
+    
+    # Write the restraint pdb file.
+    
+    commands = [ "NTrestraint " \
+                + my.quoted(my.configFile(paths['solvate'], fileName)) + " " \
+                + my.quoted(my.configFile(paths['restraint'], fileName)) + " " \
+                + str(pD['Restraint']) + "\n" ]
+    my.pdbWrite(paths['restraint'], fileName, package, commands)
+    
+    # If the simulation is a New (not Minimization) run, we need to set the forcing
+    # and the thermostat parameters, and preheat the water.
+    
+    if pD['Run Type'] == 'New':
+    
+        # Write the forcing pdb file.
+    
+        commands = [ "NTforcing " \
+                    + my.quoted(my.configFile(paths['solvate'], fileName)) + " " \
+                    + my.quoted(my.configFile(paths['forcing'], fileName)) + " " \
+                    + str(pD['Force (pN)']) + "\n" ]
+        my.pdbWrite(paths['forcing'], fileName, package, commands)
+
+        # Write the Langevin pdb file.
+    
+        commands = [ "NTtemperature " \
+                    + my.quoted(my.configFile(paths['solvate'], fileName)) + " " \
+                    + my.quoted(my.configFile(paths['temperature'], fileName)) + " " \
+                    + str(pD['Damping']) + "\n" ]
+        my.pdbWrite(paths['temperature'], fileName, package, commands)
+
+        # Set up the temporary folder for the simulation.
+        
+        paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/Preheat/'
+        
+        # Create a NAMD configuration file for the preheating run.
+        
+        preheatConfFile = confWrite(paths, pD, hostname, wisdomFile, preheat = True)
+        
+        # Link all the necessary files back to the temporary run folder.
+        
+        linkFiles(paths, pD, wisdomFile, preheat = True)
+        
+        # Do the preheating run.
+        
+        result, runTime = runSim(executable, paths['run'], preheatConfFile, \
+            pD['Config File Name'], hostname)
+    
+    # Set up a temporary run folder. This is either for a production run or for a
+    # minimization run.
+    
+    paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/'
+    
+    # Create the NAMD configuration file for the run. Again, this is a production run
+    # or a minimization run.
+    
+    confFile = confWrite(paths, pD, hostname, wisdomFile)
+    
+    # Link all the necessary files back to the temporary run folder.
+
+    linkFiles(paths, pD, wisdomFile)
+
+    # Do the simulation!!
+    
+    result, runTime = runSim(executable, paths['run'], confFile, pD['Config File Name'], hostname)
+    
+    # If the run succeeded, log it to the appropriate spreadsheet.
+    
+    if result == 0:
+    
+        if not os.path.isfile(hostname + '.csv'):
+        
+            print("################################################################\n" \
+                + "Creating file " + hostname + ".csv." + "\n" \
+                + "################################################################\n")
+        
+            outFile = open(hostname + '.csv', "w")
+            outFile.write("Date,Run Time (h),File Name,Folder,Run Type,N0,S,n,m," \
+                + "Temperature (K),Damping,Thermostat," \
+                + "Force (pN),PME,Restraint,Duration,Min Duration,dt (fs),outputFreq\n")
+                
+        print("################################################################\n" \
+              + "Writing to file " + hostname + ".csv." + "\n" \
+              + "################################################################\n")
+              
+        outFile = open(hostname + '.csv', "a")
+        outFile.write(str(datetime.date.today()) + ',' \
+            + "{:.5f}".format(runTime) + ',' \
+            + pD['Data Folder'] + ',' \
+            + pD['Top Folder'] + ',' \
+            + pD['Run Type'] + ',' \
+            + str(pD['N0']) + ',' \
+            + str(pD['S']) + ',' \
+            + str(pD['n']) + ',' \
+            + str(pD['m']) + ',' \
+            + str(pD['Temperature (K)']) + ',' \
+            + str(pD['Damping']) + ',' \
+            + pD['Thermostat'] + ',' \
+            + str(pD['Force (pN)']) + ',' \
+            + pD['PME'] + ','
+            + str(pD['Restraint']) + ',' \
+            + str(pD['Duration']) + ',' \
+            + str(pD['Min Duration']) + ',' \
+            + str(pD['dt (fs)']) + ',' \
+            + str(pD['outputFreq']) + '\n')
+    
+    print("################################################################\n" \
+          + "Finished writing to file " + hostname + ".csv." + "\n" \
+          + "################################################################\n")
+    print("################################################################\n" \
+          + "Moving " + paths['run'] + " to " + paths['data'] + ".\n" \
+          + "################################################################\n")
+    
+    # Move the temporary run file to the appropriate place in the data hierarchy.
+    
+    shutil.move(paths['run'], paths['data'])
+    
 def cntWrite(paths, fileName, N0, n, m):
     """ cntWrite creates a periodic nanotube with the following input parameters:
     fileName is the name of the initial nanotube with number of rings N0 and
@@ -124,53 +321,42 @@ def waterWrite(paths, fileName, N0, S):
     """ waterWrite adds N0 + S water molecules to the inside of the nanotube,
         then write out new psf and pdb files for the nanotube. """
 
-    if os.path.isfile(my.configFile(paths['solvate'], fileName + '.psf')) \
-        and os.path.isfile(my.configFile(paths['solvate'], fileName + '.pdb')):
-    
-        print("################################################################\n" \
-            + "Configuration files already exist in:\n" + my.config(paths['solvate']) + ".\n" \
-            + "################################################################\n")
-        
+    if not my.needConfigFiles(paths['solvate'], fileName):
         return
-        
-    print("################################################################\n" \
-        + "Adding water to the CNT and writing configuration files.\n" \
-        + "################################################################\n")
-
-    if not os.path.exists(my.config(paths['solvate'])):
-        os.makedirs(my.config(paths['solvate']))
-
+    
     # Opens input nanotube psf and pdb files, and reads all the lines of each file into lists
+
     with open(my.configFile(paths['pbc'], fileName + '.psf')) as psfFile:
         psfLines = psfFile.readlines()
     with open(my.configFile(paths['pbc'], fileName + '.pdb')) as pdbFile:
         pdbLines = pdbFile.readlines()
 
     # Grabs the lengths of each of the lists
+
     lenPsf = len(psfLines)
     lenPdb = len(pdbLines)
 
     # String formats for the PSF and PDB file writing
-    # Pdb
+    # PDB
+
     dampingCoeff = 0.00
     oxygen = "ATOM{0:>7}  OH2 TIP3 {1:4.0f}       0.000   0.000{2:>8.3f}  0.00  0.00      WTR  O\n"
     hydro1 = "ATOM{0:>7}  H1  TIP3 {1:4.0f}       0.000   0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
     hydro2 = "ATOM{0:>7}  H2  TIP3 {1:4.0f}       0.000  -0.766{2:>8.3f}  0.00  0.00      WTR  H\n"
 
     # Psf
-    # opsf  = "   {0:>5} TUB {1:>5} TIP3 OH2  OT    -0.834000       15.9994           0\n"
-    # h1psf = "   {0:>5} TUB {1:>5} TIP3 H1   HT     0.417000        1.0080           0\n"
-    # h2psf = "   {0:>5} TUB {1:>5} TIP3 H2   HT     0.417000        1.0080           0\n"
-
+    
     opsf  = "   {0:>5} WTR  {1:<4} TIP3 OH2  OT    -0.834000       15.9994           0\n"
     h1psf = "   {0:>5} WTR  {1:<4} TIP3 H1   HT     0.417000        1.0080           0\n"
     h2psf = "   {0:>5} WTR  {1:<4} TIP3 H2   HT     0.417000        1.0080           0\n"
 
     # String format for the bonds and angles in the psf file
+
     sBondFormat  = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}\n"
     sAngleFormat = " {0: >8}{1: >8}{2: >8}{3: >8}{4: >8}{5: >8}{6: >8}{7: >8}{8: >8}\n"
 
     # Initializing lists used below
+
     atoms = []
     bonds = []
     angles = []
@@ -183,16 +369,22 @@ def waterWrite(paths, fileName, N0, S):
     anglesFinal = []
 
     # Finds the original number of atoms in the Pdb file
+
     nAtoms = lenPdb-2
+
     # Calculates the new number of atoms after solvating
+
     newAtoms = nAtoms + (3*(N0+S)) 
+
     # Calculates the new number of bonds and angles after solvating
+
     newBonds = int(nAtoms*(3./2)) + 2*(N0+S)
     newAngles = nAtoms*3 + (N0+S)
 
     # Iterates through all of the lines of the input Psf file, and records the
     # index of the lines that contain the string !NATOM, !NBOND, and !NTHETA,
     # as well as changes the line to update the new number of each
+
     for i in range(0, lenPsf):
         if "!NATOM" in psfLines[i]:
             psfLines[i] = "     {:3d} !NATOM\n".format( newAtoms )
@@ -205,40 +397,52 @@ def waterWrite(paths, fileName, N0, S):
             angleIndex = i
 
     # Stores all of the original text lines that come before the atom section into a list
+
     for i in range(0, atomIndex):
         preAtoms.append(psfLines[i])
 
     # Stores the atoms into a list
+
     count = 1
     while psfLines[atomIndex+count].strip():
         atoms.append( psfLines[atomIndex+count] )
         count+=1
+
     # Stores the bonds into a list
+
     count = 1
     while psfLines[bondIndex+count].strip():
         bonds.append( psfLines[bondIndex+count] )
         count+=1
+
     # Stores the angles into a list
+
     count = 1
     while psfLines[angleIndex+count].strip():
         angles.append( psfLines[angleIndex+count] )
         count+=1
+
     # Stores all the text lines after the angles into a list
+
     for i in range(angleIndex+count, lenPsf):
         postAngles.append(psfLines[i])
 
     # Takes the bonds and angles in the original file and splits each line into individual numbers
+
     for bond in bonds:
         intBonds.append( bond.strip("\n").split() )
     for angle in angles:
         intAngles.append( angle.strip("\n").split() )
 
     # Compresses the list of lists into a single list of all of the angles and bonds in the original file
+
     intBonds = list(chain.from_iterable(intBonds))
     intAngles = list(chain.from_iterable(intAngles))    
 
     # Adds the new atoms to the original list of atoms
+
     for i in range(nAtoms+1, (3*(N0+S)) + nAtoms+1, 3):
+
         atoms.append(opsf.format(i, int((i-nAtoms)/3)+2))
         atoms.append(h1psf.format(i+1, int((i-nAtoms)/3)+2))
         atoms.append(h2psf.format(i+2, int((i-nAtoms)/3)+2))
@@ -253,7 +457,9 @@ def waterWrite(paths, fileName, N0, S):
         intBonds.append(str(i+2))
 
     # Formats the list of bonds into the psf format with 8 columns
+
     for i in range(0,len(intBonds),8):
+
         try:
             bondsFinal.append( sBondFormat.format(intBonds[i], intBonds[i+1],
                 intBonds[i+2], intBonds[i+3], intBonds[i+4], intBonds[i+5],
@@ -268,7 +474,9 @@ def waterWrite(paths, fileName, N0, S):
             bondsFinal.append( " " + tempStr + "\n" )
 
     # Formates the list of angles into the psf format with 9 columns
+
     for i in range(0, len(intAngles), 9):
+
         try:
             anglesFinal.append( sAngleFormat.format(intAngles[i], intAngles[i+1],
                 intAngles[i+2], intAngles[i+3], intAngles[i+4], intAngles[i+5],
@@ -285,6 +493,7 @@ def waterWrite(paths, fileName, N0, S):
     oxZ = waterZ(N0, S)
 
     for i in range(0, N0+S):
+
         hyZ = oxZ[i] + 0.570
         if i == 0:
             pdbLines[lenPdb-1] = oxygen.format(nAtoms+1, 2, oxZ[i])
@@ -296,13 +505,15 @@ def waterWrite(paths, fileName, N0, S):
             pdbLines.append( hydro2.format(nAtoms + (3*i+3), i+2, hyZ) )
 
     # Writes the new pdb lines to a new pdb file
+
     pdbLines.append("END\n")
-    pdbOut = open(my.configFile(paths['solvate'], fileName + '.pdb'), 'w')
+    pdbOut = open(my.configFile(paths['solvate'], fileName + '-temp.pdb'), 'w')
     pdbOut.writelines(pdbLines)
     pdbOut.close()
 
     # Writes the new psf lines to a new psf file
-    psfOut = open(my.configFile(paths['solvate'], fileName + '.psf'), 'w')
+
+    psfOut = open(my.configFile(paths['solvate'], fileName + '-temp.psf'), 'w')
     psfOut.writelines(preAtoms)
     psfOut.writelines(psfLines[atomIndex])
     psfOut.writelines(atoms)
@@ -317,22 +528,15 @@ def waterWrite(paths, fileName, N0, S):
         + "Post-processing the CNT and rewriting configuration files.\n" \
         + "################################################################\n")
 
-    logFile = open(my.config(paths['solvate']) + fileName + ".log", "w")
+    package = "package require CNTtools 1.0\n"
+    commands = [ "centerNT " + my.quoted(my.configFile(paths['solvate'], fileName)) + "\n" ]
+    my.pdbWrite(my.config(paths['solvate']), fileName, package, commands) 
 
-    # Opening a pipe to VMD in the shell
-    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
-                           stdout=logFile)
-
-    CNTtools = "package require CNTtools 1.0\n"
-
-    centerNT = "centerNT " + my.quoted(my.config(paths['solvate']) + fileName) + "\n"
-
-    VMDin.stdin.write(CNTtools)
-    VMDin.stdin.write(centerNT)
-    VMDin.stdin.flush()
-    VMDin.stdin.close
-    VMDin.communicate()
+    # Delete the now-uneeded -temp pdb and psf files.
     
+    os.remove(my.config(paths['solvate']) + fileName + "-temp.pdb")
+    os.remove(my.config(paths['solvate']) + fileName + "-temp.psf")
+
 def waterZ(N0, S, equalSpacing = False):
 
     # Bonds lengths for different armchair nanotubes, in angstroms
@@ -586,7 +790,7 @@ def confWrite(paths, pD, hostname, wisdomFile, preheat = False):
     outFile.close()
     return confFile
     
-def moveFiles(paths, pD, wisdomFile, preheat = False):
+def linkFiles(paths, pD, wisdomFile, preheat = False):
 
     paramFile = "par_all27_prot_lipid.prm"
     
@@ -641,7 +845,7 @@ def runSim(executable, simPath, simFile, output, hostname):
     numThreads['cascade'] = '+p4'
     numThreads['Home-iMac'] = '+p4'
     numThreads['nanotube'] = '+p16'
-    numThreads['CGG-MacBook-Air'] = '+p2'
+    numThreads['CGG-DPU-Laptop'] = '+p2'
 
     Namd2in=subprocess.Popen([executable, numThreads[hostname], '+isomalloc_sync', \
                 simFile], stdin=subprocess.PIPE, stdout=logFile, stderr=logFile)
@@ -668,107 +872,19 @@ def runSim(executable, simPath, simFile, output, hostname):
               
     return Namd2in.returncode, runTime
 
-# find cell basis
 def getCNTBasis(inFile):
     """ getCNTBasis finds the basis of a nanotube with filename outFile. """
+
     # Opens the CNT prebond file and reads the header of the file
+
     with open(inFile) as basisFile:
-        header = basisFile.next()
+        header = basisFile.readline()
 
     # Splits the first line of the CNT-prebond file, and finds the x, y, z basis vectors of the CNT 
+
     basis = re.split('\s+', header)
     xVec = eval(basis[1])
     yVec = eval(basis[2])
     zVec = eval(basis[3])
     
     return xVec, yVec, zVec
-
-def run(pD):
-    
-    # The paths dictionary holds the path name to each tier of the data hierarchy
-    paths = my.makeWaterPaths(pD)
-    
-    hostname = socket.gethostname().partition('.')[0]
-    wisdomFile = "FFTW_NAMD_2.11_" + hostname + ".txt"
-
-    if pD['Run Type'] == 'Minimize':
-        executable = 'namd2'
-    else:
-        if hostname == 'nanotube':
-            executable = 'namd2-cuda'
-            # executable = 'namd2'
-        else:
-            executable = 'namd2'
-        
-    if os.path.exists(paths['data']):
-        print("################################################################\n" \
-              + "Data folder for " + pD['Run Type'] + " run already exists ... aborting.\n" \
-              + "################################################################\n")
-        return
-            
-    cntWrite(paths, pD['Config File Name'], pD['N0'], pD['n'], pD['m'])
-    waterWrite(paths, pD['Config File Name'], pD['N0'], pD['S'])
-    pdbWrite(paths, pD['Config File Name'], 'restraint', pD['Restraint'])
-    
-    if pD['Run Type'] == 'New':
-    
-        pdbWrite(paths, pD['Config File Name'], 'forcing', pD['Force (pN)'])
-        pdbWrite(paths, pD['Config File Name'], 'temperature', pD['Damping'])
-        
-        paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/Preheat/'
-        preheatConfFile = confWrite(paths, pD, hostname, wisdomFile, preheat = True)
-        moveFiles(paths, pD, wisdomFile, preheat = True)
-        result, runTime = runSim(executable, paths['run'], preheatConfFile, pD['Config File Name'], hostname)
-    
-    paths['run'] = os.getenv('HOME') + '/' + pD['Data Folder'] + '/'
-    
-    confFile = confWrite(paths, pD, hostname, wisdomFile)
-    moveFiles(paths, pD, wisdomFile)
-    result, runTime = runSim(executable, paths['run'], confFile, pD['Config File Name'], hostname)
-    
-    if result == 0:
-    
-        if not os.path.isfile(hostname + '.csv'):
-        
-            print("################################################################\n" \
-                + "Creating file " + hostname + ".csv." + "\n" \
-                + "################################################################\n")
-        
-            outFile = open(hostname + '.csv', "w")
-            outFile.write("Date,Run Time (h),File Name,Folder,Run Type,N0,S,n,m," \
-                + "Temperature (K),Damping,Thermostat," \
-                + "Force (pN),PME,Restraint,Duration,Min Duration,dt (fs),outputFreq\n")
-                
-        print("################################################################\n" \
-              + "Writing to file " + hostname + ".csv." + "\n" \
-              + "################################################################\n")
-              
-        outFile = open(hostname + '.csv', "a")
-        outFile.write(str(datetime.date.today()) + ',' \
-            + "{:.5f}".format(runTime) + ',' \
-            + pD['Data Folder'] + ',' \
-            + pD['Top Folder'] + ',' \
-            + pD['Run Type'] + ',' \
-            + str(pD['N0']) + ',' \
-            + str(pD['S']) + ',' \
-            + str(pD['n']) + ',' \
-            + str(pD['m']) + ',' \
-            + str(pD['Temperature (K)']) + ',' \
-            + str(pD['Damping']) + ',' \
-            + pD['Thermostat'] + ',' \
-            + str(pD['Force (pN)']) + ',' \
-            + pD['PME'] + ','
-            + str(pD['Restraint']) + ',' \
-            + str(pD['Duration']) + ',' \
-            + str(pD['Min Duration']) + ',' \
-            + str(pD['dt (fs)']) + ',' \
-            + str(pD['outputFreq']) + '\n')
-    
-    print("################################################################\n" \
-          + "Finished writing to file " + hostname + ".csv." + "\n" \
-          + "################################################################\n")
-    print("################################################################\n" \
-          + "Moving " + paths['run'] + " to " + paths['data'] + ".\n" \
-          + "################################################################\n")
-        
-    shutil.move(paths['run'], paths['data'])

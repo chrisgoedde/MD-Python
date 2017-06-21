@@ -1,8 +1,8 @@
 # _*_ coding: utf-8
 
 import os
+import subprocess
 
-# Simple function to create a quoted string to protect file/path names with spaces
 def quoted(theString):
     """quoted puts double quotes around any string"""
 
@@ -62,7 +62,7 @@ def makePolymerPaths(paramDict):
     paths['home'] = os.path.abspath('..') + '/' + 'Polymers' + '/'
     paths['type'] = paths['home'] + paramDict['Top Folder'] + '/' + '(' + str(paramDict['n']) + ', ' + str(paramDict['m']) + ')/'
     paths['L'] = paths['type'] + 'L = ' + str(paramDict['L']) + '/'
-    paths['polymer'] = paths['L'] + paramDict['Polymer'] + '/'
+    paths['polymer'] = paths['L'] + paramDict['Polymer PDB'] + '/'
 
     paths['restraint'] = paths['polymer'] + 'R = ' + str(paramDict['Restraint']) + '/'
     paths['driving amplitude'] = paths['restraint'] + 'A = ' + str(paramDict['Driving Amplitude (A)']) + ' A/'
@@ -137,8 +137,8 @@ def setPolymerParamDefaults():
     paramDict['L'] = 200
     paramDict['n'] = 8
     paramDict['m'] = 8
-    paramDict['Polymer'] = 'PE50m'
-    paramDict['Base Polymer'] = 'PE50'
+    paramDict['Polymer PSF'] = 'PE50'
+    paramDict['Polymer PDB'] = 'PE50m'
     paramDict['Temperature (K)'] = 0
     paramDict['Damping'] = 1
     paramDict['Thermostat'] = 'Off'
@@ -195,3 +195,79 @@ def convert(theDict, theKey):
         theDict[theKey] = float(theDict[theKey])
     else:
         theDict[theKey] = int(theDict[theKey])
+
+def pdbWrite(folder, fileName, package, commands):
+    """ pdbWrite creates pdb and/or psf files by calling VMD.
+    
+    This function is called from nanomer.run() or nanogen.run() and is not meant to be
+    called directly.
+    
+    It writes the files in the appropriate place in the data hierarchy."""
+
+    if not needConfigFiles(folder, fileName):
+        return
+        
+    # Open up the log file for the VMD run.
+
+    log = open(configFile(folder, fileName + ".log"), "w")
+
+    # Feed everything to driveVMD.
+    
+    driveVMD(package, commands, logFile = log)
+
+    # If we get here we've "succeeded", even if VMD threw an error.
+    
+    print("################################################################\n" \
+        + "Finished writing configuration file(s) in\n" + config(folder) + ".\n" \
+        + "################################################################\n")
+
+def driveVMD(package, commands, logFile = subprocess.DEVNULL):
+    """ driveVMD feeds tcl commands to VMD to manipulate pdb and/or psf files."""
+    
+    # Open a pipe to VMD in the shell.
+    
+    VMDin=subprocess.Popen(["vmd", "-dispdev", "none"], stdin=subprocess.PIPE, \
+                           stdout=logFile)
+
+    # Feed the required package to VMD.
+    # This assumes that "Research/CNT/MD Simulations/Source" has been added to VMD's
+    # auto_path variable in the .vmdrc file through
+    # lappend auto_path [file join $env(HOME) "Dropbox/Work/Research/CNT/MD Simulations/Source" ]
+
+    VMDin.stdin.write(package.encode())
+    
+    # Feed the commands, one by one, to VMD.
+    
+    for com in commands:
+    
+        VMDin.stdin.write(com.encode())
+
+    # Clean up the pipe.
+    
+    VMDin.stdin.flush()
+    VMDin.stdin.close
+    VMDin.communicate()
+
+def needConfigFiles(folder, fileName):
+
+    # If the required pdb file already exists, we don't need to recreate it,
+    # so we just return. Otherwise, we will run VMD to generate it.
+        
+    if os.path.isfile(configFile(folder, fileName + ".pdb")):
+        
+        print("################################################################\n" \
+              + "Configuration file(s) already exist in:\n" + config(folder) + ".\n" \
+              + "################################################################\n")
+              
+        return False
+
+    print("################################################################\n" \
+          + "Writing configuration file(s) in:\n" + config(folder) + ".\n" \
+          + "################################################################\n")
+        
+    # Create the folder in the data hierarchy for the pdb and psf files, if needed.
+        
+    if not os.path.exists(config(folder)):
+        os.makedirs(config(folder))
+        
+    return True

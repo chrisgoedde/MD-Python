@@ -6,7 +6,7 @@ package require nanotube
 package require pbctools
 package require psfgen
 
-proc genNT {molnm path l n m} {
+proc genNT {molnm l n m} {
     # Create a nantube of length l with nxm structure
     nanotube -l $l -n $n -m $m
     set mymol [atomselect top all]
@@ -19,10 +19,10 @@ proc genNT {molnm path l n m} {
     
     pbc set $cell
     
-    # Save the nanotube in the file molnm in the folder specified by path
-    set molpath ${path}${molnm}
-    $mymol writepsf $molpath.psf
-    $mymol writepdb $molpath.pdb
+    # Save the nanotube in the file molnm
+    
+    $mymol writepsf $molnm.psf
+    $mymol writepdb $molnm.pdb
 
 }
 
@@ -201,8 +201,8 @@ proc NTtemperature {molnm fileOut damping} {
 proc centerNT {molnm} {
 
     # Open the files molnm.psf and molnm.pdb to load the molecule
-    mol new [file normalize ${molnm}.psf] type psf autobonds off waitfor all
-    mol addfile [file normalize ${molnm}.pdb] type pdb autobonds off waitfor all
+    mol new [file normalize ${molnm}-temp.psf] type psf autobonds off waitfor all
+    mol addfile [file normalize ${molnm}-temp.pdb] type pdb autobonds off waitfor all
 
     # Fine the CM of the nanotube
     set carb [ atomselect top carbon ]
