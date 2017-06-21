@@ -1,0 +1,6 @@
+export PATH=$PATH:/Users/goedde/Dropbox/Work/Research/CNT/NAMD\ 2.12:/Users/goedde/Dropbox/Work/Research/CNT/VMD\ 1.9.3/VMD\ 1.9.3.app/Contents/vmd:/Users/goedde/Dropbox/ffmpeg
+
+export PYTHONPATH=/Users/goedde/Dropbox/ffmpeg:/Users/goedde/Dropbox/Work/Research/CNT/MD\ Simulations/Source
+
+# added by Anaconda3 4.4.0 installer
+export PATH="/Users/goedde/Dropbox/anaconda/bin:$PATH"

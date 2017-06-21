@@ -1,0 +1,3 @@
+tkcon font Monaco 14;
+set ::tkcon::OPT(cols) 60
+set ::tkcon::OPT(rows) 20

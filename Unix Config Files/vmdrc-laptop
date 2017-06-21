@@ -1,0 +1,67 @@
+menu graphics on
+menu main on
+menu files on
+
+menu graphics move 1100 50
+menu main move 550 50
+menu files move 10 600
+display reposition 10 830
+
+light 0 on
+light 1 on
+light 2 off
+light 3 off
+
+# axes location origin
+color Display Background white
+
+lappend auto_path [file join $env(HOME) "Dropbox/Work/Research/CNT/MD Simulations/Source" ]
+
+proc reset_viz {molid} {
+  # operate only on existing molecules
+  if {[lsearch [molinfo list] $molid] >= 0} {
+    # delete all representations
+    set numrep [molinfo $molid get numreps]
+    for {set i 0} {$i < $numrep} {incr i} {
+      mol delrep $i $molid
+    }
+    # add new representations
+    mol color Name
+    mol representation licorice
+    mol selection segname PO1
+    mol material Opaque
+    mol addrep $molid
+
+    mol representation lines
+    mol selection segname TUB
+    mol addrep $molid
+
+    # mol representation DynamicBonds 1.6 0.3 6.0
+    # mol selection {name C}
+    # mol addrep $molid
+    # mol representation DynamicBonds 1.2 0.3 6.0
+    # mol selection {name C H}
+    # mol addrep $molid
+  } 
+}
+
+proc reset_viz_proxy {args} {
+  foreach {fname molid rw} $args {}
+  eval "after idle {reset_viz $molid}"
+}
+
+## hook up the function.
+trace variable vmd_initialize_structure w reset_viz_proxy
+# take care of molecule loaded at start.
+
+after idle {
+
+    if {![info exists env(VMDTEXT)]} {
+        menu tkcon on
+        menu tkcon move 650 325
+    
+    }
+    
+    reset_viz 0
+    
+}
